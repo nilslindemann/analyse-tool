@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chessboard</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="pieces.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <h1 id='please-enable-js-message'>please enable Javascript</h1>
+
+    <!-- <h1>Schachanalyse-Tool</h1> -->
+
+    <!-- <piece-toolbar>
+        <div class="piece white-king"></div>
+        <div class="piece white-queen"></div>
+        <div class="piece white-rook"></div>
+        <div class="piece white-bishop"></div>
+        <div class="piece white-knight"></div>
+        <div class="piece white-pawn"></div>
+        <div class="piece black-king"></div>
+        <div class="piece black-queen"></div>
+        <div class="piece black-rook"></div>
+        <div class="piece black-bishop"></div>
+        <div class="piece black-knight"></div>
+        <div class="piece black-pawn"></div>
+    </piece-toolbar> -->
+
+    <div class="board" id="board">
+        <!-- <chess-piece class="wn"></chess-piece> -->
+    </div>
+
+
+    <variation-toolbar>
+        <i class="material-icons" title="Variante hoch">vertical_align_top</i>
+        <i class="material-icons" title="Variante runter">vertical_align_bottom</i>
+        <i class="material-icons" title="Variante aufwerten">reply</i>
+        <i class="material-icons" title="Zur Hauptvariante machen">reply_all</i>
+        <i class="material-icons" title="Reset">replay</i>
+        <!-- <i class="material-icons" title="Figuren-Toolbar anzeigen">pan_tool</i> -->
+        <i class="material-icons right" title="Hilfe anzeigen">help_outline</i>
+    </variation-toolbar>
+
+    <main-variation>
+        <white-move>e2e4</white-move>
+        <black-move class="active">c7c5</black-move>
+        <white-move>Sg1f3</white-move>
+        <black-move>d7d6</black-move>
+        <sub-variation>
+            <black-move>Sb8c6</black-move>
+            <white-move>d2d4</white-move>
+            <sub-variation>
+                <white-move>Lf1-b5 <comment-after>avoids Sveshnikov</comment-after></white-move>
+            </sub-variation>
+            <black-move>c5xd4</black-move>
+            <white-move>Sf3xd4</white-move>
+            <black-move>Sg8f6</black-move>
+            <white-move>Sb1c3</white-move>
+            <black-move>e7e5 <comment-after>Sveshnikov</comment-after></black-move>
+        </sub-variation>
+        <white-move>d2d4</white-move>
+        <sub-variation>
+            <white-move>c2c3</white-move>
+            <black-move>Sg8f6</black-move>
+            <white-move>e4e5</white-move>
+            <black-move>Sf6d5</black-move>
+            <white-move>d2d4</white-move>
+            <black-move>Sb8c6</black-move>
+            <white-move>Lf1c4</white-move>
+            <black-move>e7e6</black-move>
+            <sub-variation>
+                <black-move>Sd5b6</black-move>
+                <white-move>Lc4b3</white-move>
+                <sub-variation>
+                    <white-move>Lc4e2</white-move>
+                </sub-variation>
+                <div>
+                    <white-move>Lc4d3</white-move>
+                </div>
+                </sub-variation>
+        </sub-variation>
+        <black-move>c5xd4</black-move>
+        <black-move>Sf3xd4</black-move>
+        <black-move>Sg8f6</black-move>
+        <black-move>Sb1c3</black-move>
+    </main-variation>
+    <script src="jquery.js"></script>
+    <script src="logic.js"></script>
+</body>
+
+</html>
