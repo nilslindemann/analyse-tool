@@ -1,6 +1,8 @@
 "use strict";
 /* Tool to analyze chess positions */
-// SECTION Tools
+//[cf]
+//[of]:Tools
+//[of]:items()
 /**
  * Iterate over the keys and values of an iterable ('iterable' in the Python
  * sense). Except on Maps and Objects the key will be an int denoting the
@@ -28,7 +30,24 @@ function* items(iterable) {
     }
 }
 ;
-// CLASS State
+//[cf]
+//[cf]
+//[of]:HASH
+let HASH = new class {
+    constructor() {
+        this.items = {};
+        this.uid = 0;
+    }
+    add(thing) {
+        this.items[++this.uid] = thing;
+        return this.uid;
+    }
+    get(uid) {
+        return this.items[uid];
+    }
+};
+//[cf]
+//[of]:State
 /** The Application state. */
 class State {
     // variation: ChessVariation | undefined;
@@ -52,6 +71,8 @@ class State {
         }
     }
 }
+//[cf]
+//[of]:Observer
 /** Element on the page listening to changes in the State. The View in MVC */
 class Observer {
     constructor(state) {
@@ -62,12 +83,15 @@ class Observer {
         console.log('Observer.update() - to be implemented in subclasses');
     }
 }
-// Section Chess board
+//[cf]
+//[of]:Chess board
 class ChessBoard extends Observer {
+    //[of]:constructor()
     constructor(id, state) {
         super(state);
         this.pieces = {};
         this.grabbedPiece = null;
+        //[of]:define .dimensions
         let domElement = $(id);
         this.domElement = domElement;
         let dimensions = { boardSize: 0, pieceSize: 0, halfPieceSize: 0 };
@@ -77,12 +101,16 @@ class ChessBoard extends Observer {
         dimensions.pieceSize = pieceSize;
         dimensions.halfPieceSize = Math.round(pieceSize / 2);
         this.dimensions = dimensions;
+        //[cf]
         let self = this;
+        //[of]:mousedown handler
         domElement.on('mousedown', 'chess-piece', function (event) {
             let piece = $(this);
             self.grab(piece, event);
             event.stopPropagation();
         });
+        //[cf]
+        //[of]:mousemovehandler
         domElement.on('mousemove', function (event) {
             let piece = self.grabbedPiece;
             if (piece) {
@@ -90,6 +118,8 @@ class ChessBoard extends Observer {
                 event.stopPropagation();
             }
         });
+        //[cf]
+        //[of]:mouseup handler
         domElement.on('mouseup', function (event) {
             let piece = self.grabbedPiece;
             if (piece) {
@@ -97,9 +127,13 @@ class ChessBoard extends Observer {
                 event.stopPropagation();
             }
         });
+        //[cf]
     }
+    //[cf]
+    //[of]:public update()
     update() {
         let position = this.state.position;
+        //[of]:squares
         let squares = null;
         if (position === null) {
             throw new Error("The application state has no defined a chess position. Do this by e.g. running ApplicationState.reset()");
@@ -107,6 +141,7 @@ class ChessBoard extends Observer {
         else {
             squares = position.squares;
         }
+        //[cf]
         let pieces = this.pieces;
         for (let [y, row] of items(squares)) {
             for (let [x, uid] of items(row)) {
@@ -118,43 +153,41 @@ class ChessBoard extends Observer {
                     }
                     else {
                         let piece = HASH.get(uid);
-                        let pieceDomElement = $(`<chess-piece class="${piece.type}" />`);
-                        pieceDomElement.data({ uid: uid });
+                        let pieceDomElement = this.createPiece(piece.pieceType, uid);
                         this.domElement.append(pieceDomElement);
-                        pieces[uid] = pieceDomElement;
                         this.place(pieceDomElement, x, y);
                     }
                 }
             }
         }
-        // this.elem = elem;
-        // board.chessposition[index] = this;
-        // // remove unused pieces from self_position and the DOM
-        // for (let [pos, piece] of Object.entries(self_position)) {
-        //     if (state_position[pos] !== piece.data('name')) {
-        //         delete self_position[pos];
-        //         piece.remove();
-        //     }
-        // }
-        // // add new pieces to self_position and the DOM
-        // for (let [pos, name] of Object.entries(state_position)) {
-        //     if (self_position[pos] === undefined) {
-        //         this.place(this.createPiece(name, pos))
-        //     }
-        // }
     }
+    //[cf]
+    //[of]:static mouseX()
     static mouseX(event) {
         return (event.pageX) - event.delegateTarget.offsetLeft;
     }
+    //[cf]
+    //[of]:static mouseY()
     static mouseY(event) {
         return event.pageY - event.delegateTarget.offsetTop;
     }
+    //[cf]
+    //[of]:static percentage()
+    static percentage(coordinate) {
+        return coordinate * 12.5 + '%';
+    }
+    //[cf]
+    //[of]:private dragX()
     dragX(event) {
         return ChessBoard.mouseX(event) - this.dimensions.halfPieceSize;
     }
+    //[cf]
+    //[of]:private dragY()
     dragY(event) {
         return ChessBoard.mouseY(event) - this.dimensions.halfPieceSize;
     }
+    //[cf]
+    //[of]:private grab()
     grab(piece, event) {
         this.grabbedPiece = piece;
         piece.css({
@@ -162,12 +195,13 @@ class ChessBoard extends Observer {
             left: this.dragX(event)
         });
     }
-    static percentage(coordinate) {
-        return coordinate * 12.5 + '%';
-    }
+    //[cf]
+    //[of]:private indexFromMousePos()
     indexFromMousePos(mousePos) {
         return Math.floor(mousePos / this.dimensions.pieceSize);
     }
+    //[cf]
+    //[of]:private release()
     release(piece, event) {
         this.grabbedPiece = null;
         piece.css({
@@ -175,43 +209,27 @@ class ChessBoard extends Observer {
             left: ChessBoard.percentage(this.indexFromMousePos(ChessBoard.mouseX(event)))
         });
     }
+    //[cf]
+    //[of]:private place()
     place(piece, x, y) {
         piece.css({
             top: ChessBoard.percentage(y),
             left: ChessBoard.percentage(x)
         });
     }
+    //[cf]
+    //[of]:private createPiece()
+    createPiece(pieceType, uid) {
+        let pieceDomElement = $(`<chess-piece class="${pieceType}" />`);
+        pieceDomElement.data({ uid: uid });
+        this.pieces[uid] = pieceDomElement;
+        return pieceDomElement;
+    }
 }
-// class ChessNotation extends Observer {
-//     private domElement: JQuery<HTMLElement>;
-//     constructor(domElementId: string, state: ApplicationState) {
-//         super(state);
-//         this.domElement = $(domElementId);
-//     }
-// }
-// class ChessToolbar extends Observer {
-//     private domElement: JQuery<HTMLElement>;
-//     constructor(domElementId: string, state: ApplicationState) {
-//         super(state);
-//         this.domElement = $(domElementId);
-//     }
-// }
-// SECTION HASH
-let HASH = new class {
-    constructor() {
-        this.items = {};
-        this.uid = 0;
-    }
-    add(thing) {
-        this.items[++this.uid] = thing;
-        return this.uid;
-    }
-    get(uid) {
-        return this.items[uid];
-    }
-};
-// CLASS ChessPosition
+//[cf]
+//[of]:ChessPosition
 class ChessPosition {
+    //[of]:constructor()
     constructor(fen) {
         let [piecePositions, toMove, castling, enPassant] = fen.trim().split(/\s+/);
         this.squares = [
@@ -252,51 +270,98 @@ class ChessPosition {
         }
         else {
             this.enPassant = [
-                ChessPosition.COLUMN_TRANSPOSITION_TABLE[enPassant[0]],
-                ChessPosition.ROW_TRANSPOSITION_TABLE[enPassant[1]]
+                ChessPosition.
+                    COLUMN_TRANSPOSITION_TABLE[enPassant[0]],
+                ChessPosition.
+                    ROW_TRANSPOSITION_TABLE[enPassant[1]]
             ];
         }
     }
 }
+//[of]:STARTFEN
 ChessPosition.STARTFEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+//[cf]
+//[of]:COLUMN_TRANSPOSITION_TABLE
 ChessPosition.COLUMN_TRANSPOSITION_TABLE = {
-    'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5, 'g': 6, 'h': 7
+    'a': 0, 'b': 1, 'c': 2, 'd': 3,
+    'e': 4, 'f': 5, 'g': 6, 'h': 7,
 };
+//[cf]
+//[of]:ROW_TRANSPOSITION_TABLE
 ChessPosition.ROW_TRANSPOSITION_TABLE = {
-    '8': 0, '7': 1, '6': 2, '5': 3, '4': 4, '3': 5, '2': 6, '1': 7
+    '8': 0, '7': 1, '6': 2, '5': 3,
+    '4': 4, '3': 5, '2': 6, '1': 7,
 };
+//[cf]
+//[of]:PIECE_TRANSPOSITION_TABLE
 ChessPosition.PIECE_TRANSPOSITION_TABLE = {
-    'k': ['b', 'k'], 'q': ['b', 'q'], 'r': ['b', 'r'], 'b': ['b', 'b'], 'n': ['b', 'n'], 'p': ['b', 'p'],
-    'K': ['w', 'k'], 'Q': ['w', 'q'], 'R': ['w', 'r'], 'B': ['w', 'b'], 'N': ['w', 'n'], 'P': ['w', 'p']
+    'k': ['b', 'k'], 'q': ['b', 'q'],
+    'r': ['b', 'r'], 'b': ['b', 'b'],
+    'n': ['b', 'n'], 'p': ['b', 'p'],
+    'K': ['w', 'k'], 'Q': ['w', 'q'],
+    'R': ['w', 'r'], 'B': ['w', 'b'],
+    'N': ['w', 'n'], 'P': ['w', 'p'],
 };
-// CLASS Piece
+//[cf]
+//[of]:Piece
 class Piece {
+    //[of]:constructor()
     constructor(type, x, y) {
-        this.type = type;
+        this.pieceType = type;
         this.x = x;
         this.y = y;
         this.uid = HASH.add(this);
     }
 }
-// class ChessMove {
-//     position: ChessPosition;
-//     constructor(position: ChessPosition) {
-//         this.position = position;
-//     }
-// }
-// class ChessVariation {
-//     constructor() {
-//     }
-//     appendMove(move: ChessMove) {
-//         console.log(move);
-//     }
-// }
-// SECTION init
+//[cf]
+//[of]:~ ChessNotation
+//[c]~ class ChessNotation extends Observer {
+//[c]    ~ private domElement: JQuery<HTMLElement>;
+//[c]    ~ constructor(domElementId: string, state: State) {
+//[c]        ~ super(state);
+//[c]        ~ this.domElement = $(domElementId);
+//[c]    ~ }
+//[c]~ }
+//[cf]
+//[of]:~ ChessToolbar
+//[c]~ class ChessToolbar extends Observer {
+//[c]    ~ private domElement: JQuery<HTMLElement>;
+//[of]:~ constructor()
+//[c]~ constructor(domElementId: string, state: State) {
+//[c]    ~ super(state);
+//[c]    ~ this.domElement = $(domElementId);
+//[c]~ }
+//[cf]
+//[c]~ }
+//[cf]
+//[of]:~ ChessMove
+//[c]~ class ChessMove {
+//[c]    ~ position: ChessPosition;
+//[of]:~ constructor()
+//[c]~ constructor(position: ChessPosition) {
+//[c]    ~ this.position = position;
+//[c]~ }
+//[cf]
+//[c]~ }
+//[cf]
+//[of]:~ ChessVariation
+//[c]~ class ChessVariation {
+//[of]:~ constructor()
+//[c]~ constructor() {
+//[c]~ }
+//[cf]
+//[of]appendMove(move\: ChessMove):~ appendMove()
+//[c]~ appendMove(move: ChessMove) {
+//[c]    ~ console.log(move);
+//[c]~ }
+//[cf]
+//[c]~ }
+//[cf]
 window.onload = function () {
     $('#please-enable-js-message').remove();
     let state = new State();
     new ChessBoard('#chessboard', state);
-    // new ChessNotation('#notation', state);
-    // new ChessToolbar('#toolbar', state);
+    //[c]    ~ new ChessNotation('#notation', state);
+    //[c]    ~ new ChessToolbar('#toolbar', state);
     state.reset();
 };
