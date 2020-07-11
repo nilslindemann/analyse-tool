@@ -1,6 +1,0 @@
-#[l]:analyse-tool.html:analyse-tool.html
-#[l]:style.css:style.css
-#[l]:board-background.svg:board-background.svg
-
-Bitte mit https://github.com/nilslindemann/Code_Browser_49 öffnen, Navigation mittels ALT + Pfeil.
-
