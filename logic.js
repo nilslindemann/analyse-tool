@@ -1,47 +1,19 @@
 "use strict";
-/* Tool to analyze chess positions */
-//[cf]
-//[of]:Tools
-//[of]:items()
-/**
- * Iterate over the keys and values of an iterable ('iterable' in the Python
- * sense). Except on Maps and Objects the key will be an int denoting the
- * index of the value in the iterable.
- * */
-function* items(iterable) {
-    let theType = iterable.constructor;
-    if (theType === Map) {
-        // @ts-ignore
-        for (const entry of iterable.entries()) {
-            yield entry;
-        }
-    }
-    else if (theType === Object) {
-        for (const entry of Object.entries(iterable)) {
-            yield entry;
-        }
-    }
-    else {
-        let index = -1;
-        // @ts-ignore
-        for (const value of iterable) {
-            yield [++index, value];
-        }
-    }
-}
-;
-//[cf]
-//[cf]
+/* Tool to analyse chess positions */
 //[of]:HASH
 let HASH = new class {
     constructor() {
         this.items = {};
         this.uid = 0;
+        //[cf]
     }
+    //[of]:public add()
     add(thing) {
         this.items[++this.uid] = thing;
         return this.uid;
     }
+    //[cf]
+    //[of]:public get()
     get(uid) {
         return this.items[uid];
     }
@@ -50,35 +22,44 @@ let HASH = new class {
 //[of]:State
 /** The Application state. */
 class State {
-    // variation: ChessVariation | undefined;
+    //[c]    ~ variation: ChessVariation | undefined;
+    //[of]:constructor()
     constructor() {
         this.observers = new Set();
         this.position = null;
     }
-    /** Call this after all observers have been registered (ApplicationState.obserers.add(Observer)). This is also executed when clicking the 'reset' button, therefore the name. */
-    reset() {
-        this.position = new ChessPosition(ChessPosition.STARTFEN);
-        // let move = new ChessMove(position);
-        // let variation = new ChessVariation();
-        // variation.appendMove(move);
-        // this.variation = variation;
-        this.notifyObservers();
-    }
-    /** called internally when Changes to the State have happened */
+    //[cf]
+    //[of]:private notifyObservers()
+    /** called internally when changes to the State were made */
     notifyObservers() {
         for (let observer of this.observers) {
             observer.update();
         }
     }
+    //[cf]
+    //[of]:public reset()
+    /** Call this after all observers have been registered (ApplicationState.obserers.add(Observer)). This is also executed when clicking the 'reset' button, therefore the name. */
+    reset() {
+        this.position = new ChessPosition(ChessPosition.STARTFEN);
+        //[c]    ~ let move = new ChessMove(position);
+        //[c]    ~ let variation = new ChessVariation();
+        //[c]    ~ variation.appendMove(move);
+        //[c]    ~ this.variation = variation;
+        this.notifyObservers();
+    }
 }
 //[cf]
 //[of]:Observer
-/** Element on the page listening to changes in the State. The View in MVC */
+/** An element on the page, listening to changes in the State */
 class Observer {
+    //[of]:constructor()
     constructor(state) {
         this.state = state;
         state.observers.add(this);
     }
+    //[cf]
+    //[of]:public update()
+    /** {@link State} calls this on every {@link Observer}, when it has made changes to its state. Dont call it manually, as it assumes that some things are set in the State. */
     update() {
         console.log('Observer.update() - to be implemented in subclasses');
     }
@@ -86,6 +67,7 @@ class Observer {
 //[cf]
 //[of]:Chess board
 class ChessBoard extends Observer {
+    //[cf]
     //[of]:constructor()
     constructor(id, state) {
         super(state);
@@ -103,14 +85,14 @@ class ChessBoard extends Observer {
         this.dimensions = dimensions;
         //[cf]
         let self = this;
-        //[of]:mousedown handler
+        //[of]:define mousedown handler
         domElement.on('mousedown', 'chess-piece', function (event) {
             let piece = $(this);
             self.grab(piece, event);
             event.stopPropagation();
         });
         //[cf]
-        //[of]:mousemovehandler
+        //[of]:define mousemovehandler
         domElement.on('mousemove', function (event) {
             let piece = self.grabbedPiece;
             if (piece) {
@@ -119,7 +101,7 @@ class ChessBoard extends Observer {
             }
         });
         //[cf]
-        //[of]:mouseup handler
+        //[of]:define mouseup handler
         domElement.on('mouseup', function (event) {
             let piece = self.grabbedPiece;
             if (piece) {
@@ -129,39 +111,6 @@ class ChessBoard extends Observer {
         });
         //[cf]
     }
-    //[cf]
-    //[of]:public update()
-    update() {
-        let position = this.state.position;
-        //[of]:squares
-        let squares = null;
-        if (position === null) {
-            throw new Error("The application state has no defined a chess position. Do this by e.g. running ApplicationState.reset()");
-        }
-        else {
-            squares = position.squares;
-        }
-        //[cf]
-        let pieces = this.pieces;
-        for (let [y, row] of items(squares)) {
-            for (let [x, uid] of items(row)) {
-                if (!uid) {
-                    continue;
-                }
-                else {
-                    if (uid in pieces) {
-                    }
-                    else {
-                        let piece = HASH.get(uid);
-                        let pieceDomElement = this.createPiece(piece.pieceType, uid);
-                        this.domElement.append(pieceDomElement);
-                        this.place(pieceDomElement, x, y);
-                    }
-                }
-            }
-        }
-    }
-    //[cf]
     //[of]:static mouseX()
     static mouseX(event) {
         return (event.pageX) - event.delegateTarget.offsetLeft;
@@ -175,6 +124,12 @@ class ChessBoard extends Observer {
     //[of]:static percentage()
     static percentage(coordinate) {
         return coordinate * 12.5 + '%';
+    }
+    //[cf]
+    //[of]:static coordsFromPos()
+    static coordsFromPos(pos) {
+        let x = pos % 8;
+        return [x, (pos - x) / 8];
     }
     //[cf]
     //[of]:private dragX()
@@ -224,6 +179,38 @@ class ChessBoard extends Observer {
         pieceDomElement.data({ uid: uid });
         this.pieces[uid] = pieceDomElement;
         return pieceDomElement;
+    }
+    //[cf]
+    //[of]:public update()
+    update() {
+        let position = this.state.position;
+        //[of]:squares
+        let squares = null;
+        if (position === null) {
+            throw new Error("The application state has no defined a chess position. Do this by e.g. running ApplicationState.reset()");
+        }
+        else {
+            squares = position.squares;
+        }
+        //[cf]
+        let pieces = this.pieces;
+        for (let [y, row] of items(squares)) {
+            for (let [x, uid] of items(row)) {
+                if (!uid) {
+                    continue;
+                }
+                else {
+                    if (uid in pieces) {
+                    }
+                    else {
+                        let piece = HASH.get(uid);
+                        let pieceDomElement = this.createPiece(piece.pieceType, uid);
+                        this.domElement.append(pieceDomElement);
+                        this.place(pieceDomElement, x, y);
+                    }
+                }
+            }
+        }
     }
 }
 //[cf]
@@ -314,6 +301,48 @@ class Piece {
     }
 }
 //[cf]
+//[of]:Tools
+//[of]:items()
+/**
+ * Iterate over the keys and values of an iterable ('iterable' in the Python sense).
+ * */
+function* items(iterable) {
+    if (iterable instanceof Map) {
+        for (const entry of iterable.entries()) {
+            yield entry;
+        }
+    }
+    else if (
+    // sorted by usage frequency
+    iterable instanceof Array
+        || typeof iterable === 'string'
+        || iterable instanceof Set
+        || iterable instanceof String) {
+        let index = -1;
+        for (const value of iterable) {
+            yield [++index, value];
+        }
+    }
+    else if (iterable instanceof Object) {
+        for (const entry of Object.entries(iterable)) {
+            yield entry;
+        }
+    }
+    else {
+        throw new Error(`Can not be used with '${typeof iterable}' type`);
+    }
+}
+//[cf]
+//[cf]
+window.onload = function () {
+    $('#please-enable-js-message').remove();
+    let state = new State();
+    new ChessBoard('#chessboard', state);
+    //[c]    ~ new ChessNotation('#notation', state);
+    //[c]    ~ new ChessToolbar('#toolbar', state);
+    state.reset();
+};
+//[cf]
 //[of]:~ ChessNotation
 //[c]~ class ChessNotation extends Observer {
 //[c]    ~ private domElement: JQuery<HTMLElement>;
@@ -357,11 +386,3 @@ class Piece {
 //[cf]
 //[c]~ }
 //[cf]
-window.onload = function () {
-    $('#please-enable-js-message').remove();
-    let state = new State();
-    new ChessBoard('#chessboard', state);
-    //[c]    ~ new ChessNotation('#notation', state);
-    //[c]    ~ new ChessToolbar('#toolbar', state);
-    state.reset();
-};
