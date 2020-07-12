@@ -6,14 +6,18 @@
 
 :root {
     --u : 24px;
-    --square : min(
-        calc(
-            (100vw - 2 * var(--u)) / 8
-        ),
-        calc(
-            (100vh - 2 * var(--u)) / 8
-        )
-    );
+    --square : calc(var(--u) * 2);
+    
+/*[c]    for reasons i dont know this doesnt work in Chrome, but in Firefox*/
+/*[c]    ~ --square : min(*/
+/*[c]        ~ calc(*/
+/*[c]            ~ (100vw - 2 * var(--u)) / 8*/
+/*[c]        ~ ),*/
+/*[c]        ~ calc(*/
+/*[c]            ~ (100vh - 2 * var(--u)) / 8*/
+/*[c]        ~ )*/
+/*[c]    ~ );*/
+
     --blue : #ccddee;
 }
 
@@ -46,6 +50,7 @@ piece-toolbar .piece {
     height: calc(8 * var(--square));
     background-size: calc(var(--square) * 2);
     /* box-shadow: 0 0 calc(var(--u) / 4) 0 rgba(0,0,0,0.1); */
+    /* border:1px solid green; */
 }
 
 chess-piece {
@@ -56,6 +61,10 @@ chess-piece {
     width: var(--square);
     height: var(--square);
     background-size: var(--square);
+}
+
+chess-piece.hidden {
+    visibility: hidden;
 }
 
 variation-toolbar {

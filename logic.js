@@ -3,54 +3,151 @@
 //[of]:HASH
 let HASH = new class {
     constructor() {
-        this.items = {};
+        this.entries = {};
         this.uid = 0;
         //[cf]
     }
     //[of]:public add()
     add(thing) {
-        this.items[++this.uid] = thing;
+        this.entries[++this.uid] = thing;
         return this.uid;
     }
     //[cf]
     //[of]:public get()
     get(uid) {
-        return this.items[uid];
+        return this.entries[uid];
     }
 };
 //[cf]
 //[of]:State
 /** The Application state. */
 class State {
-    //[c]    ~ variation: ChessVariation | undefined;
     //[of]:constructor()
     constructor() {
+        //[cf]
         this.observers = new Set();
         this.position = null;
     }
+    //[of]:reset()
+    /**
+     * Call this after all observers have been registered
+     * (ApplicationState.obserers.add(Observer)). This is also executed when
+     * clicking the 'reset' button, therefore the name.
+     * */
+    reset() {
+        this.position = new ChessPosition(ChessPosition.STARTFEN);
+        this.notifyObservers();
+    }
     //[cf]
-    //[of]:private notifyObservers()
+    //[of]:makeMove()
+    makeMove(from, to) {
+        let position = this.position;
+        if (!position) {
+            throw new Error("State has not been initialized");
+        }
+        else {
+            let ps = position.piecePositions;
+            let c = position.castling;
+            //[of]:white castle short
+            if (c.whiteShort
+                &&
+                    ((from == 60 && (to == 62 || to == 63))
+                        ||
+                            (from == 63 && to == 60))
+                &&
+                    !ps[61] && !ps[62]) {
+                ps[62] = ps[60];
+                ps[61] = ps[63];
+                delete ps[60];
+                delete ps[63];
+                position.castling.whiteShort = false;
+                position.castling.whiteLong = false;
+            }
+            //[cf]
+            //[of]:white castle long
+            else if (c.whiteLong
+                &&
+                    ((from == 60 && (to > 55 && to < 59))
+                        ||
+                            (from == 56 && to == 60))
+                &&
+                    !ps[57] && !ps[58] && !ps[59]) {
+                ps[58] = ps[60];
+                ps[59] = ps[56];
+                delete ps[60];
+                delete ps[56];
+                position.castling.whiteShort = false;
+                position.castling.whiteLong = false;
+            }
+            //[cf]
+            //[of]:black castle short
+            else if (c.blackShort
+                &&
+                    ((from == 4 && (to == 6 || to == 7))
+                        ||
+                            (from == 7 && to == 4))
+                &&
+                    !ps[5] && !ps[6]) {
+                ps[6] = ps[4];
+                ps[5] = ps[7];
+                delete ps[4];
+                delete ps[7];
+                position.castling.blackShort = false;
+                position.castling.blackLong = false;
+            }
+            //[cf]
+            //[of]:black castle long
+            else if (c.blackLong
+                &&
+                    ((from == 4 && (to > -1 && to < 3))
+                        ||
+                            (from == 0 && to == 4))
+                &&
+                    !ps[1] && !ps[2] && !ps[3]) {
+                ps[2] = ps[4];
+                ps[3] = ps[0];
+                delete ps[4];
+                delete ps[0];
+                position.castling.blackShort = false;
+                position.castling.blackLong = false;
+            }
+            //[cf]
+            //[of]:normal move
+            else {
+                let fromUid = ps[from];
+                let toUid = ps[to];
+                let isLegal = true;
+                if (toUid) {
+                    let fromPiece = HASH.get(fromUid);
+                    let toPiece = HASH.get(toUid);
+                    if ((fromPiece.isWhitePiece === toPiece.isWhitePiece)) {
+                        isLegal = false;
+                    }
+                }
+                if (isLegal) {
+                    delete ps[from];
+                    ps[to] = fromUid;
+                }
+            }
+            //[cf]
+            this.notifyObservers();
+        }
+    }
+    //[cf]
+    //[of]:private
+    //[of]:notifyObservers()
     /** called internally when changes to the State were made */
     notifyObservers() {
         for (let observer of this.observers) {
             observer.update();
         }
     }
-    //[cf]
-    //[of]:public reset()
-    /** Call this after all observers have been registered (ApplicationState.obserers.add(Observer)). This is also executed when clicking the 'reset' button, therefore the name. */
-    reset() {
-        this.position = new ChessPosition(ChessPosition.STARTFEN);
-        //[c]    ~ let move = new ChessMove(position);
-        //[c]    ~ let variation = new ChessVariation();
-        //[c]    ~ variation.appendMove(move);
-        //[c]    ~ this.variation = variation;
-        this.notifyObservers();
-    }
 }
 //[cf]
 //[of]:Observer
-/** An element on the page, listening to changes in the State */
+/**
+ * An element on the page, listening to changes in the State
+ * */
 class Observer {
     //[of]:constructor()
     constructor(state) {
@@ -58,159 +155,225 @@ class Observer {
         state.observers.add(this);
     }
     //[cf]
-    //[of]:public update()
-    /** {@link State} calls this on every {@link Observer}, when it has made changes to its state. Dont call it manually, as it assumes that some things are set in the State. */
+    //[of]:public
+    //[of]:update()
+    /**
+     * {@link State} calls this on every {@link Observer}, when it has
+     * made changes to its state. Dont call it manually, as it assumes
+     * that some things are set in the State.
+     * */
     update() {
         console.log('Observer.update() - to be implemented in subclasses');
     }
 }
 //[cf]
 //[of]:Chess board
-class ChessBoard extends Observer {
-    //[cf]
+class Board extends Observer {
     //[of]:constructor()
     constructor(id, state) {
         super(state);
-        this.pieces = {};
-        this.grabbedPiece = null;
-        //[of]:define .dimensions
-        let domElement = $(id);
-        this.domElement = domElement;
-        let dimensions = { boardSize: 0, pieceSize: 0, halfPieceSize: 0 };
-        let boardSize = Math.round(domElement.width() || 300);
-        dimensions.boardSize = boardSize;
-        let pieceSize = Math.round(boardSize / 8);
-        dimensions.pieceSize = pieceSize;
-        dimensions.halfPieceSize = Math.round(pieceSize / 2);
-        this.dimensions = dimensions;
         //[cf]
+        //[of]:private
+        this.pieceElemsByUid = {};
+        this.grabbedPiece = null;
+        let boardElem = this.boardElem = $(id);
+        this.dimensions = Board.calculateDimensions(boardElem);
         let self = this;
         //[of]:define mousedown handler
-        domElement.on('mousedown', 'chess-piece', function (event) {
+        boardElem.on('mousedown', 'chess-piece', function (event) {
+            event.stopPropagation();
+            event.preventDefault();
             let piece = $(this);
             self.grab(piece, event);
-            event.stopPropagation();
         });
         //[cf]
         //[of]:define mousemovehandler
-        domElement.on('mousemove', function (event) {
+        boardElem.on('mousemove', function (event) {
+            event.stopPropagation();
+            event.preventDefault();
             let piece = self.grabbedPiece;
             if (piece) {
                 self.grab(piece, event);
-                event.stopPropagation();
             }
         });
         //[cf]
         //[of]:define mouseup handler
-        domElement.on('mouseup', function (event) {
+        boardElem.on('mouseup', function (event) {
+            event.stopPropagation();
+            event.preventDefault();
             let piece = self.grabbedPiece;
             if (piece) {
                 self.release(piece, event);
-                event.stopPropagation();
             }
         });
         //[cf]
-    }
-    //[of]:static mouseX()
-    static mouseX(event) {
-        return (event.pageX) - event.delegateTarget.offsetLeft;
-    }
-    //[cf]
-    //[of]:static mouseY()
-    static mouseY(event) {
-        return event.pageY - event.delegateTarget.offsetTop;
+        //[of]:define resize handler
+        $(window).on('resize', function () {
+            self.dimensions = Board.calculateDimensions(self.boardElem);
+        });
+        //[cf]
     }
     //[cf]
-    //[of]:static percentage()
-    static percentage(coordinate) {
-        return coordinate * 12.5 + '%';
+    //[of]:update()
+    update() {
+        let statePieceUidsByPos = null;
+        {
+            let position = this.state.position;
+            if (position === null) {
+                throw new Error('The application state has no defined a chess position. '
+                    + 'Do this by e.g. running ApplicationState.reset()');
+            }
+            else {
+                statePieceUidsByPos = position.piecePositions;
+            }
+        }
+        let selfPieceElemsByUid = this.pieceElemsByUid;
+        for (const [pos, uid] of items(statePieceUidsByPos)) {
+            let pieceElem;
+            let piece = HASH.get(uid);
+            if (!(uid in selfPieceElemsByUid)) {
+                pieceElem = $(`<chess-piece class="${piece.pieceType}" />`);
+                pieceElem.data({ uid: uid, pos: 0 });
+                this.pieceElemsByUid[uid] = pieceElem;
+                this.boardElem.append(pieceElem);
+                this.place(pieceElem, pos);
+            }
+            else {
+                pieceElem = selfPieceElemsByUid[uid];
+                this.place(pieceElem, pos, { 'smooth': true });
+            }
+        }
+        for (const [uid, pieceElem] of items(selfPieceElemsByUid)) {
+            // if (!(uid in statePieceUidsByPos)) {
+            let pos = pieceElem.data('pos');
+            if (!(pos in statePieceUidsByPos)
+                || (pieceElem.data('uid') !== statePieceUidsByPos[pos])) {
+                this.takeFromBoard(pieceElem);
+            }
+        }
     }
-    //[cf]
-    //[of]:static coordsFromPos()
-    static coordsFromPos(pos) {
-        let x = pos % 8;
-        return [x, (pos - x) / 8];
-    }
-    //[cf]
-    //[of]:private dragX()
+    //[of]:dragX()
     dragX(event) {
-        return ChessBoard.mouseX(event) - this.dimensions.halfPieceSize;
+        return Board.mouseX(event) - this.dimensions.halfPieceSize;
     }
     //[cf]
-    //[of]:private dragY()
+    //[of]:dragY()
     dragY(event) {
-        return ChessBoard.mouseY(event) - this.dimensions.halfPieceSize;
+        return Board.mouseY(event) - this.dimensions.halfPieceSize;
     }
     //[cf]
-    //[of]:private grab()
+    //[of]:grab()
     grab(piece, event) {
         this.grabbedPiece = piece;
         piece.css({
+            zIndex: 1000,
             top: this.dragY(event),
             left: this.dragX(event)
         });
     }
     //[cf]
-    //[of]:private indexFromMousePos()
+    //[of]:indexFromMousePos()
     indexFromMousePos(mousePos) {
         return Math.floor(mousePos / this.dimensions.pieceSize);
     }
     //[cf]
-    //[of]:private release()
+    //[of]:eventGetPos()
+    eventGetPos(event) {
+        let x = Board.mouseX(event);
+        let y = Board.mouseY(event);
+        let boardSize = this.dimensions.boardSize;
+        if (x < 0 || y < 0 || x > boardSize || y > boardSize) {
+            return null;
+        }
+        else {
+            return Board.coordsToPos(this.indexFromMousePos(x), this.indexFromMousePos(y));
+        }
+    }
+    //[cf]
+    //[of]:release()
     release(piece, event) {
         this.grabbedPiece = null;
         piece.css({
-            top: ChessBoard.percentage(this.indexFromMousePos(ChessBoard.mouseY(event))),
-            left: ChessBoard.percentage(this.indexFromMousePos(ChessBoard.mouseX(event)))
+            zIndex: 1
         });
-    }
-    //[cf]
-    //[of]:private place()
-    place(piece, x, y) {
-        piece.css({
-            top: ChessBoard.percentage(y),
-            left: ChessBoard.percentage(x)
-        });
-    }
-    //[cf]
-    //[of]:private createPiece()
-    createPiece(pieceType, uid) {
-        let pieceDomElement = $(`<chess-piece class="${pieceType}" />`);
-        pieceDomElement.data({ uid: uid });
-        this.pieces[uid] = pieceDomElement;
-        return pieceDomElement;
-    }
-    //[cf]
-    //[of]:public update()
-    update() {
-        let position = this.state.position;
-        //[of]:squares
-        let squares = null;
-        if (position === null) {
-            throw new Error("The application state has no defined a chess position. Do this by e.g. running ApplicationState.reset()");
+        let to = this.eventGetPos(event);
+        if (to !== null) {
+            let from = piece.data('pos');
+            this.state.makeMove(from, to);
         }
         else {
-            squares = position.squares;
+            this.update();
         }
-        //[cf]
-        let pieces = this.pieces;
-        for (let [y, row] of items(squares)) {
-            for (let [x, uid] of items(row)) {
-                if (!uid) {
-                    continue;
-                }
-                else {
-                    if (uid in pieces) {
-                    }
-                    else {
-                        let piece = HASH.get(uid);
-                        let pieceDomElement = this.createPiece(piece.pieceType, uid);
-                        this.domElement.append(pieceDomElement);
-                        this.place(pieceDomElement, x, y);
-                    }
-                }
-            }
+    }
+    //[cf]
+    //[of]:takeFromBoard()
+    takeFromBoard(piece) {
+        piece.addClass('hidden');
+    }
+    //[cf]
+    //[of]:place()
+    place(pieceElem, pos, options = { smooth: false }) {
+        let [x, y] = Board.posToCoords(pos);
+        if (options.smooth) {
+            pieceElem.animate({
+                top: Board.coordToPercent(y),
+                left: Board.coordToPercent(x)
+            }, 100);
         }
+        else {
+            pieceElem.css({
+                top: Board.coordToPercent(y),
+                left: Board.coordToPercent(x)
+            });
+        }
+        pieceElem.data('pos', pos);
+    }
+    //[cf]
+    //[of]:~ createPiece()
+    //[c]~ private createPiece(pieceType: pieceType, uid: uid): JQuery<HTMLElement> {
+    //[c]    ~ let pieceDomElement = $(`<chess-piece class="${pieceType}" />`);
+    //[c]    ~ pieceDomElement.data({ uid: uid });
+    //[c]    ~ this.pieces[uid] = pieceDomElement;
+    //[c]    ~ return pieceDomElement;
+    //[c]~ }
+    //[cf]
+    //[cf]
+    //[of]:static
+    //[of]:mouseX()
+    static mouseX(event) {
+        return event.pageX - event.delegateTarget.offsetLeft;
+    }
+    //[cf]
+    //[of]:mouseY()
+    static mouseY(event) {
+        return event.pageY - event.delegateTarget.offsetTop;
+    }
+    //[cf]
+    //[of]:coordToPercent()
+    static coordToPercent(coord) {
+        return coord * 12.5 + '%';
+    }
+    //[cf]
+    //[of]:posToCoords()
+    static posToCoords(pos) {
+        let x = pos % 8;
+        return [x, (pos - x) / 8];
+    }
+    //[cf]
+    //[of]:coordsToPos()
+    static coordsToPos(x, y) {
+        return y * 8 + x;
+    }
+    //[cf]
+    //[of]:calculateDimensions()
+    static calculateDimensions(boardElem) {
+        let dimensions = { boardSize: 0, pieceSize: 0, halfPieceSize: 0 };
+        let boardSize = Math.round(boardElem.width() || 300);
+        dimensions.boardSize = boardSize;
+        let pieceSize = Math.round(boardSize / 8);
+        dimensions.pieceSize = pieceSize;
+        dimensions.halfPieceSize = Math.round(pieceSize / 2);
+        return dimensions;
     }
 }
 //[cf]
@@ -219,30 +382,21 @@ class ChessPosition {
     //[of]:constructor()
     constructor(fen) {
         let [piecePositions, toMove, castling, enPassant] = fen.trim().split(/\s+/);
-        this.squares = [
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0],
-        ];
-        let x = 0;
-        let y = 0;
-        for (const char of piecePositions) {
-            let emptySquares = parseInt(char);
-            if (emptySquares) {
-                x += emptySquares;
-            }
-            else if (char === '/') {
-                x = 0;
-                y += 1;
-            }
-            else {
-                this.squares[y][x] = new Piece(char, x, y).uid;
-                x++;
+        this.piecePositions = {};
+        {
+            let pos = 0;
+            for (const char of piecePositions) {
+                let emptySquares = parseInt(char);
+                if (emptySquares) {
+                    pos += emptySquares;
+                }
+                else if (char === '/') {
+                    continue;
+                }
+                else {
+                    this.piecePositions[pos] = new Piece(char, pos).uid;
+                    pos++;
+                }
             }
         }
         this.whiteToMove = toMove.toLowerCase() === 'w';
@@ -252,7 +406,7 @@ class ChessPosition {
             blackShort: castling.includes('k'),
             blackLong: castling.includes('q')
         };
-        if (enPassant = '-') {
+        if (enPassant === '-') {
             this.enPassant = null;
         }
         else {
@@ -264,39 +418,30 @@ class ChessPosition {
             ];
         }
     }
+    clone() {
+    }
 }
-//[of]:STARTFEN
+//[of]:static
 ChessPosition.STARTFEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-//[cf]
-//[of]:COLUMN_TRANSPOSITION_TABLE
 ChessPosition.COLUMN_TRANSPOSITION_TABLE = {
-    'a': 0, 'b': 1, 'c': 2, 'd': 3,
-    'e': 4, 'f': 5, 'g': 6, 'h': 7,
+    'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5, 'g': 6, 'h': 7,
 };
-//[cf]
-//[of]:ROW_TRANSPOSITION_TABLE
 ChessPosition.ROW_TRANSPOSITION_TABLE = {
-    '8': 0, '7': 1, '6': 2, '5': 3,
-    '4': 4, '3': 5, '2': 6, '1': 7,
+    '8': 0, '7': 1, '6': 2, '5': 3, '4': 4, '3': 5, '2': 6, '1': 7,
 };
-//[cf]
-//[of]:PIECE_TRANSPOSITION_TABLE
 ChessPosition.PIECE_TRANSPOSITION_TABLE = {
-    'k': ['b', 'k'], 'q': ['b', 'q'],
-    'r': ['b', 'r'], 'b': ['b', 'b'],
-    'n': ['b', 'n'], 'p': ['b', 'p'],
-    'K': ['w', 'k'], 'Q': ['w', 'q'],
-    'R': ['w', 'r'], 'B': ['w', 'b'],
-    'N': ['w', 'n'], 'P': ['w', 'p'],
+    'k': ['b', 'k'], 'q': ['b', 'q'], 'r': ['b', 'r'], 'b': ['b', 'b'],
+    'n': ['b', 'n'], 'p': ['b', 'p'], 'K': ['w', 'k'], 'Q': ['w', 'q'],
+    'R': ['w', 'r'], 'B': ['w', 'b'], 'N': ['w', 'n'], 'P': ['w', 'p'],
 };
 //[cf]
 //[of]:Piece
 class Piece {
     //[of]:constructor()
-    constructor(type, x, y) {
-        this.pieceType = type;
-        this.x = x;
-        this.y = y;
+    constructor(pieceType, pos) {
+        this.pieceType = pieceType;
+        this.isWhitePiece = pieceType !== pieceType.toLowerCase();
+        this.pos = pos;
         this.uid = HASH.add(this);
     }
 }
@@ -304,7 +449,8 @@ class Piece {
 //[of]:Tools
 //[of]:items()
 /**
- * Iterate over the keys and values of an iterable ('iterable' in the Python sense).
+ * Iterate over the keys and values of an iterable
+ * ('iterable' in the Python sense).
  * */
 function* items(iterable) {
     if (iterable instanceof Map) {
@@ -337,18 +483,38 @@ function* items(iterable) {
 window.onload = function () {
     $('#please-enable-js-message').remove();
     let state = new State();
-    new ChessBoard('#chessboard', state);
+    new Board('#board', state);
     //[c]    ~ new ChessNotation('#notation', state);
     //[c]    ~ new ChessToolbar('#toolbar', state);
     state.reset();
 };
+//[c]~ interface ChessPosition {
+//[c]    ~ piecePositions: {[pos: number]: uid},
+//[c]    ~ whiteToMove: boolean,
+//[c]    ~ castling: {
+//[c]        ~ whiteShort: boolean, whiteLong: boolean,
+//[c]        ~ blackShort: boolean, blackLong: boolean
+//[c]    ~ },
+//[c]    ~ enPassant: pos
+//[c]~ }
 //[cf]
 //[of]:~ ChessNotation
 //[c]~ class ChessNotation extends Observer {
-//[c]    ~ private domElement: JQuery<HTMLElement>;
-//[c]    ~ constructor(domElementId: string, state: State) {
+//[c]    ~ constructor(id: domElementId, state: State) {
 //[c]        ~ super(state);
-//[c]        ~ this.domElement = $(domElementId);
+//[c]        ~ this.domElem = $(id);
+//[c]        ~ this.variation = null;
+//[c]    ~ }
+//[c]    ~ private domElem: JQuery<HTMLElement>;
+//[c]    ~ private variation: ChessVariation | null;
+//[c]    ~ public update() {
+//[c]        ~ if (! this.variation) {
+//[c]            ~ let move = new ChessMove(position);
+//[c]            ~ let variation = new ChessVariation();
+//[c]            ~ variation.appendMove(move);
+//[c]            ~ this.variation = variation;
+//[c]        ~ } else {
+//[c]        ~ }
 //[c]    ~ }
 //[c]~ }
 //[cf]
