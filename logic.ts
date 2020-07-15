@@ -3,17 +3,17 @@
 //[of]:HASH
 let HASH = new class {
 
-    private entries: { [key: number]: Piece } = {};
-    private uid: uid = 0;
+    private entries:{ [ key:number ]:Piece } = { };
+    private uid:uid = 0;
 
-    //[of]:public add()
-    public add(thing: Piece): uid {
+    //[of]:add()
+    public add( thing:Piece ):uid {
         this.entries[++this.uid] = thing;
         return this.uid;
     }
     //[cf]
-    //[of]:public get()
-    public get(uid: uid): Piece {
+    //[of]:get()
+    public get( uid:uid ): Piece {
         return this.entries[uid];
     }
     //[cf]
@@ -21,173 +21,242 @@ let HASH = new class {
 };
 //[cf]
 
+//[c]( MVC
 //[of]:State
 /** The Application state. */
 class State {
 
-    //[of]:constructor()
-    constructor() {
-        this.position = null;
-    }
-    //[cf]
-
-    public observers: Set<Observer> = new Set();
-    public position: ChessPosition | null;
+    public observers:Set<Observer> = new Set();
+    public position:Chessposition | null = null;
 
     //[of]:reset()
-    /**
-     * Call this after all observers have been registered
-     * (ApplicationState.obserers.add(Observer)). This is also executed when
-     * clicking the 'reset' button, therefore the name.
-     * */
+    /** Call this after all observers have been registered - doing `<State>.observers.add(<Observer>)`. */
     public reset() {
-        this.position = new ChessPosition(ChessPosition.STARTFEN);
+        this.position = positionFromFen(STARTFEN);
         this.notifyObservers();
     }
     //[cf]
     //[of]:makeMove()
-    public makeMove(from: pos, to: pos) {
+    public makeMove(from: boardindex, to: boardindex):this {
         let position = this.position;
-        if (!position) {
-            throw new Error("State has not been initialized");
-        } else {
-            let ps = position.piecePositions;
+        if (!position) { throw new Error("State has not been initialized"); }
     
-            let c = position.castling;
-            //[of]:white castle short
-            if (
-                c.whiteShort
-                &&
-                (
-                    (
-                        from == 60 && (to == 62 || to == 63)
-                    )
-                    ||
-                    (from == 63 && to == 60) 
-                )
-                &&
-                !ps[61] && !ps[62]
-            ) {
-                ps[62] = ps[60];
-                ps[61] = ps[63];
-                delete ps[60];
-                delete ps[63];
-                position.castling.whiteShort = false;
-                position.castling.whiteLong = false;
-            }
-            //[cf]
-            //[of]:white castle long
-            else if (
-                c.whiteLong
-                &&
-                (
-                    (
-                        from == 60 && (to > 55 && to < 59)
-                    )
-                    ||
-                    (from == 56 && to == 60) 
-                )
-                &&
-                !ps[57] && !ps[58] && !ps[59]
-            ) {
-                ps[58] = ps[60];
-                ps[59] = ps[56];
-                delete ps[60];
-                delete ps[56];
-                position.castling.whiteShort = false;
-                position.castling.whiteLong = false;
-            }
-            //[cf]
-            //[of]:black castle short
-            else if (
-                c.blackShort
-                &&
-                (
-                    (
-                        from == 4 && (to == 6 || to == 7)
-                    )
-                    ||
-                    (from == 7 && to == 4) 
-                )
-                &&
-                !ps[5] && !ps[6]
-            ) {
-                ps[6] = ps[4];
-                ps[5] = ps[7];
-                delete ps[4];
-                delete ps[7];
-                position.castling.blackShort = false;
-                position.castling.blackLong = false;
-            }
-            //[cf]
-            //[of]:black castle long
-            else if (
-                c.blackLong
-                &&
-                (
-                    (
-                        from == 4 && (to > -1 && to < 3)
-                    )
-                    ||
-                    (from == 0 && to == 4) 
-                )
-                &&
-                !ps[1] && !ps[2] && !ps[3]
-            ) {
-                ps[2] = ps[4];
-                ps[3] = ps[0];
-                delete ps[4];
-                delete ps[0];
-                position.castling.blackShort = false;
-                position.castling.blackLong = false;
-            }
-            //[cf]
-    
-            //[of]:normal move
-            else {
-                let fromUid = ps[from];
-                let toUid = ps[to];
-                let isLegal = true;
-                if (toUid ) {
-                    let fromPiece = HASH.get(fromUid);
-                    let toPiece = HASH.get(toUid);
-                    if (
-                        (fromPiece.isWhitePiece === toPiece.isWhitePiece)
-                    ) {
-                        isLegal = false
-                    }
-                }
-                if (isLegal) {
-                    delete ps[from];
-                    ps[to] = fromUid;
-                }
-            }
-            //[cf]
-    
-            this.notifyObservers();
+        if (from == to) {
+            return this.notifyObservers();
         }
+    
+        let board = position.board;
+        let castling = position.castling;
+        let whitetomove = position.whitetomove;
+    
+        let fromuid = board[from];
+        let touid = board[to];
+        let frompiece = HASH.get(fromuid);
+        let topiece = HASH.get(touid);
+    
+        let iswhite = frompiece.iswhite;
+    
+        let enpassant = position.enpassant;
+        let newenpassant = null;
+    
+        let movemade = false;
+        let waslegalmove = false;
+    
+    
+        //[of]:white castles short
+        if (!movemade &&
+            castling.whiteshort &&
+            (
+                (
+                    from == 60 && (to == 62 || to == 63)
+                ) ||
+                (from == 63 && to == 60) 
+            ) &&
+            !(61 in board) && !(62 in board)
+        ) {
+            board[62] = board[60];
+            board[61] = board[63];
+            delete board[60];
+            delete board[63];
+            castling.whiteshort = false;
+            castling.whitelong = false;
+        
+            movemade = true;
+            if (whitetomove) {
+                waslegalmove = true;
+            }
+        }
+        //[cf]
+        //[of]:white castles long
+        if (!movemade &&
+            castling.whitelong &&
+            (
+                (
+                    from == 60 && (to > 55 && to < 59)
+                ) ||
+                (from == 56 && to == 60)
+            ) &&
+            !(57 in board) && !(58 in board) && !(59 in board)
+        ) {
+            board[58] = board[60];
+            board[59] = board[56];
+            delete board[60];
+            delete board[56];
+            castling.whiteshort = false;
+            castling.whitelong = false;
+        
+            movemade = true;
+            if (whitetomove) {
+                waslegalmove = true;
+            }
+        }
+        //[cf]
+        //[of]:black castles short
+        if (!movemade &&
+            castling.blackshort &&
+            (
+                (
+                    from == 4 && (to == 6 || to == 7)
+                ) ||
+                (from == 7 && to == 4) 
+            ) &&
+            !(5 in board) && !(6 in board)
+        ) {
+            board[6] = board[4];
+            board[5] = board[7];
+            delete board[4];
+            delete board[7];
+            castling.blackshort = false;
+            castling.blacklong = false;
+        
+            movemade = true;
+            if (!whitetomove) {
+                waslegalmove = true;
+            }
+        }
+        //[cf]
+        //[of]:black castles long
+        if (!movemade &&
+            castling.blacklong &&
+            (
+                (
+                    from == 4 && (to > -1 && to < 3)
+                ) ||
+                (from == 0 && to == 4) 
+            ) &&
+            !(1 in board) && !(2 in board) && !(3 in board)
+        ) {
+            board[2] = board[4];
+            board[3] = board[0];
+            delete board[4];
+            delete board[0];
+            castling.blackshort = false;
+            castling.blacklong = false;
+        
+            movemade = true;
+            if (!whitetomove) {
+                waslegalmove = true;
+            }
+        }
+        //[cf]
+        //[of]:en passant
+        if (
+            !movemade && enpassant && !touid && frompiece.type=='p' && to==enpassant &&
+            (
+                (
+                    iswhite && whitetomove &&
+                    (from==enpassant+7 || from==enpassant+9) &&
+                    HASH.get(board[enpassant+8]).type=='p' &&
+                    !HASH.get(board[enpassant+8]).iswhite
+                ) ||
+                (
+                    !frompiece.iswhite && !whitetomove &&
+                    (from==enpassant-7 || from==enpassant-9) &&
+                    HASH.get(board[enpassant-8]).type=='p' &&
+                    HASH.get(board[enpassant-8]).iswhite
+                )
+            )
+        ) {
+            board[to] = fromuid;
+            delete board[from];
+            if (whitetomove) {
+                delete board[enpassant+8]
+            } else {
+                delete board[enpassant-8]
+            }
+        
+            movemade = true;
+            waslegalmove = true;
+        }
+        //[cf]
+        //[of]:white pawn moves two squares from start position
+        if (
+            !movemade && !touid && frompiece.type=='p' && frompiece.iswhite &&
+            from > 47 && from < 56 && to==from-16
+        ) {
+            delete board[from];
+            board[to] = fromuid;
+            movemade = true;
+            newenpassant = from-8;
+            if (whitetomove) {
+                waslegalmove = true;
+            }
+        }
+        //[cf]
+        //[of]:black pawn moves two squares from start position
+        if (
+            !movemade && !touid && frompiece.type=='p' && !frompiece.iswhite &&
+            from > 7 && from < 16 && to==from+16
+        ) {
+            delete board[from];
+            board[to] = fromuid;
+            movemade = true;
+            newenpassant = from+8;
+            if (!whitetomove) {
+                waslegalmove = true;
+            }
+        }
+        //[cf]
+        //[of]:normal move
+        if (!movemade) {
+            if (!(touid && frompiece.iswhite === topiece.iswhite)) {
+                delete board[from];
+                board[to] = fromuid;
+                movemade = true;
+                waslegalmove = true; // todo
+            }
+        }
+        //[cf]
+    
+        if (waslegalmove) {
+            position.whitetomove = !whitetomove;
+            position.enpassant = newenpassant;
+        } else if (newenpassant) {
+            position.enpassant = newenpassant;
+        }
+    
+        return this.notifyObservers();
     }
+    
     //[cf]
 
-
-    //[of]:private
     //[of]:notifyObservers()
     /** called internally when changes to the State were made */
-    private notifyObservers() {
+    private notifyObservers():this {
         for (let observer of this.observers) {
             observer.update();
         }
+        return this;
     }
-    //[cf]
     //[cf]
 
 }
 //[cf]
 //[of]:Observer
-/**
- * An element on the page, listening to changes in the State
- * */
-class Observer {
+/** An element on the page, listening to changes in the State */
+abstract class Observer {
+
+    protected readonly state: State;
 
     //[of]:constructor()
     constructor(state: State) {
@@ -195,370 +264,373 @@ class Observer {
         state.observers.add(this);
     }
     //[cf]
-    //[of]:protected
-    protected readonly state: State;
-    //[cf]
-    //[of]:public
+
     //[of]:update()
-    /**
-     * {@link State} calls this on every {@link Observer}, when it has
-     * made changes to its state. Dont call it manually, as it assumes
-     * that some things are set in the State.
-     * */
-    public update() {
-        console.log('Observer.update() - to be implemented in subclasses');
-    }
-    //[cf]
+    /** Called by the Application State when it has made changes to its state. */
+    abstract update():void;
     //[cf]
 
 }
 //[cf]
-//[of]:Chess board
+//[of]:Board
 class Board extends Observer {
 
+    private pieces:{ [ uid:number ]:pieceelem } = { };
+    private grabbedpiece:pieceelem|null = null;
+    private elem:boardelem;
+    private dimensions:Boarddimensions;
+    
     //[of]:constructor()
-    constructor(id: domElementId, state: State) {
-        super(state);
-    
-        let boardElem = this.boardElem = $(id);
-        this.dimensions = Board.calculateDimensions(boardElem);
-        let self = this;
-    
-        //[of]:define mousedown handler
-        boardElem.on('mousedown', 'chess-piece', function (
-            event: JQuery.MouseDownEvent
-        ) {
-            event.stopPropagation();
-            event.preventDefault();
-            let piece = $(this);
-            self.grab(piece, event);
-        });
-        //[cf]
-        //[of]:define mousemovehandler
-        boardElem.on('mousemove', function (event: JQuery.MouseMoveEvent) {
-            event.stopPropagation();
-            event.preventDefault();
-            let piece = self.grabbedPiece;
-            if (piece) {
-                self.grab(piece, event);
-            }
-        });
-        //[cf]
-        //[of]:define mouseup handler
-        boardElem.on('mouseup', function (event: JQuery.MouseUpEvent) {
-            event.stopPropagation();
-            event.preventDefault();
-            let piece = self.grabbedPiece;
-            if (piece) {
-                self.release(piece, event);
-            }
-        });
-        //[cf]
-        //[of]:define resize handler
-        $(window).on('resize', function() {
-            self.dimensions = Board.calculateDimensions(self.boardElem);
-        });
-        //[cf]
-    
-    }
-    //[cf]
-
-    //[of]:update()
-    public update() {
-    
-        let statePieceUidsByPos = null;
-        {
-            let position = this.state.position;
-            if (position === null) {
-                throw new Error(
-                    'The application state has no defined a chess position. '
-                    + 'Do this by e.g. running ApplicationState.reset()'
-                );
-            } else {
-                statePieceUidsByPos = position.piecePositions;
-            }
-        }
-        let selfPieceElemsByUid = this.pieceElemsByUid;
-    
-        for (const [pos, uid] of items(statePieceUidsByPos)) {
-            let pieceElem;
-            let piece = HASH.get(uid);
-            if (!(uid in selfPieceElemsByUid)) {
-                pieceElem = $(`<chess-piece class="${piece.pieceType}" />`);
-                pieceElem.data({ uid: uid, pos: 0 });
-                this.pieceElemsByUid[uid] = pieceElem;
-                this.boardElem.append(pieceElem);
-                this.place(pieceElem, pos);
-            } else {
-                pieceElem = selfPieceElemsByUid[uid];
-                this.place(pieceElem, pos, {'smooth':true});
-            }
-        }
-    
-        for (const [uid, pieceElem] of items(selfPieceElemsByUid)) {
-            // if (!(uid in statePieceUidsByPos)) {
-            let pos = pieceElem.data('pos');
-            if (
-                !(pos in statePieceUidsByPos)
-                || (pieceElem.data('uid') !== statePieceUidsByPos[pos])
-            ) {
-                this.takeFromBoard(pieceElem);
-            }
-        }
-    }
-    //[cf]
-
-    //[of]:private
-    private pieceElemsByUid: { [uid: number]: JQuery<HTMLElement> } = {};
-    private grabbedPiece: JQuery<HTMLElement> | null = null;
-    private boardElem: JQuery<HTMLElement>;
-    private dimensions: Dimensions;
-    
-    //[of]:dragX()
-    private dragX(event: JQueryMouseEvent) {
-        return Board.mouseX(event) - this.dimensions.halfPieceSize;
-    }
-    //[cf]
-    //[of]:dragY()
-    private dragY(event: JQueryMouseEvent) {
-        return Board.mouseY(event) - this.dimensions.halfPieceSize;
-    }
-    //[cf]
     //[of]:grab()
-    private grab(piece: JQuery<HTMLElement>, event: JQueryMouseEvent) {
-        this.grabbedPiece = piece;
-        piece.css({
-            zIndex: 1000,
-            top: this.dragY(event),
-            left: this.dragX(event)
-        });
-    }
-    //[cf]
-    //[of]:indexFromMousePos()
-    private indexFromMousePos(mousePos: pixels) {
-        return Math.floor(mousePos / this.dimensions.pieceSize);
-    }
-    //[cf]
-    //[of]:eventGetPos()
-    private eventGetPos(event: JQueryMouseEvent): pos | null {
-        let x = Board.mouseX(event);
-        let y = Board.mouseY(event);
-        let boardSize = this.dimensions.boardSize;
-        if (x < 0 || y < 0 || x > boardSize || y > boardSize) {
-            return null;
+    private grab( piece:pieceelem|null, mouse:Mouseinfos|null ):this {
+        if (piece) {
+            this.grabbedpiece = piece;
         } else {
-            return Board.coordsToPos(
-                this.indexFromMousePos(x),
-                this.indexFromMousePos(y)
-            );
+            piece = this.grabbedpiece;
         }
+        if (piece && mouse) {
+            piece.css({
+                zIndex: 1000,
+                top: mouse.dragY,
+                left: mouse.dragX,
+            });
+        }
+        return this;
     }
     //[cf]
     //[of]:release()
-    private release(piece: JQuery<HTMLElement>, event: JQueryMouseEvent) {
-        this.grabbedPiece = null;
-        piece.css({
-            zIndex: 1
-        });
-        let to = this.eventGetPos(event);
-        if (to !== null) {
-            let from = piece.data('pos');
+    private release( mouse:Mouseinfos|null ):this {
+        let piece = this.grabbedpiece;
+        this.grabbedpiece = null;
+        if (piece && mouse) {
+            piece.css({
+                zIndex: 1
+            });
+            let to = mouse.index;
+            let from = parseInt(piece.data('index'));
             this.state.makeMove(from, to);
         } else {
             this.update();
         }
+        return this;
+    }
+    
+    //[cf]
+    
+    constructor ( boardid:elemid, state:State ) {
+        super(state);
+    
+        let elem = this.elem = $(boardid);
+    
+        this.dimensions = this.updateDimensions();
+    
+        let self = this;
+        elem.on('mousedown', 'chess-piece', function( event:mousedownevent ) {
+            self.grab($(this), self.readMouseinfos(event));
+            return handled(event);
+        });
+        elem.on('mousemove', function( event:mousemoveevent ) {
+            if (self.grabbedpiece) {
+                let mouseinfos = self.readMouseinfos(event);
+                if (mouseinfos) {
+                    let index = mouseinfos.index;
+                    if (index < 8) {
+                        self.togglePromo(true, true);
+                    } else if (index > 55) {
+                        self.togglePromo(true, false);
+                    } else {
+                        self.togglePromo(false, false);
+                    }
+                }
+                self.grab(null, mouseinfos);
+                return handled(event);
+            }
+        });
+        elem.on('mouseup', function( event:mouseupevent ) {
+            self.togglePromo(false);
+            self.release(self.readMouseinfos(event));
+            return handled(event);
+        });
+        $(window).on('resize', function() {
+            self.dimensions = self.updateDimensions();
+        });
     }
     //[cf]
-    //[of]:takeFromBoard()
-    private takeFromBoard(piece: JQuery<HTMLElement>) {
-        piece.addClass('hidden');
+    //[of]:update()
+    //[of]:makePiece()
+    private makePiece( id:uid ):pieceelem {
+        let piece = HASH.get(id);
+        let piecetype = piece.iswhite ? piece.type.toUpperCase() : piece.type;
+        let elem = $(`<chess-piece class="${piecetype}" />`);
+        elem.data({ id: id, index: 0 });
+        this.pieces[id] = elem;
+        this.elem.append(elem);
+        return elem;
+    }
+    //[cf]
+    //[of]:drop()
+    private drop( elem:pieceelem ):this {
+        elem.addClass('hidden');
+        return this;
     }
     //[cf]
     //[of]:place()
     private place(
-        pieceElem: JQuery<HTMLElement>,
-        pos: pos,
-        options: {smooth: boolean} = {smooth:false}
-    ) {
-        let [x,y] = Board.posToCoords(pos);
+        elem: pieceelem,
+        index: boardindex,
+        options:{ smooth:boolean } = { smooth: false }
+    ):this {
+        let [x,y] = indexToCoords(index);
         if (options.smooth) {
-            pieceElem.animate({
-                top: Board.coordToPercent(y),
-                left: Board.coordToPercent(x)
+            elem.animate({
+                top: coordToPercent(y),
+                left: coordToPercent(x)
             }, 100);
         } else {
-            pieceElem.css({
-                top: Board.coordToPercent(y),
-                left: Board.coordToPercent(x)
+            elem.css({
+                top: coordToPercent(y),
+                left: coordToPercent(x)
             });
         }
-        pieceElem.data('pos', pos);
+        elem.data('index', index);
+        return this;
     }
     //[cf]
     
-    //[of]:~ createPiece()
-    //[c]~ private createPiece(pieceType: pieceType, uid: uid): JQuery<HTMLElement> {
-    //[c]    ~ let pieceDomElement = $(`<chess-piece class="${pieceType}" />`);
-    //[c]    ~ pieceDomElement.data({ uid: uid });
-    //[c]    ~ this.pieces[uid] = pieceDomElement;
-    //[c]    ~ return pieceDomElement;
-    //[c]~ }
-    //[cf]
-    //[cf]
-    //[of]:static
-    //[of]:mouseX()
-    static mouseX(event: JQueryMouseEvent) {
-        return event.pageX - event.delegateTarget.offsetLeft;
-    }
-    //[cf]
-    //[of]:mouseY()
-    static mouseY(event: JQueryMouseEvent) {
-        return event.pageY - event.delegateTarget.offsetTop;
-    }
-    //[cf]
-    //[of]:coordToPercent()
-    static coordToPercent(coord: index) {
-        return coord * 12.5 + '%';
-    }
-    //[cf]
-    //[of]:posToCoords()
-    static posToCoords(pos: pos) {
-        let x = pos % 8;
-        return [x, (pos-x)/8];
-    }
-    //[cf]
-    //[of]:coordsToPos()
-    static coordsToPos(x: columnIndex, y: rowIndex) {
-        return y * 8 + x;
-    }
-    //[cf]
-    //[of]:calculateDimensions()
-    static calculateDimensions(
-        boardElem: JQuery<HTMLElement>
-    ): Dimensions {
-        let dimensions = {boardSize: 0, pieceSize: 0, halfPieceSize: 0};
-        let boardSize = Math.round(boardElem.width() || 300);
-        dimensions.boardSize = boardSize;
-        let pieceSize = Math.round(boardSize / 8);
-        dimensions.pieceSize = pieceSize;
-        dimensions.halfPieceSize = Math.round(pieceSize / 2);
-        return dimensions;
-    }
-    //[cf]
-    //[cf]
-}
-//[cf]
-//[of]:ChessPosition
-class ChessPosition {
-
-    //[of]:constructor()
-    constructor(fen: fen) {
+    public update() {
     
-        let [
-            piecePositions,
-            toMove,
-            castling,
-            enPassant
-        ] = fen.trim().split(/\s+/);
+        let position = this.state.position;
+        if (position === null) {
+            throw new Error(
+                'The application state has no defined a chess position. '
+                + 'Do this by e.g. running <State>.reset()'
+            );
+        }
     
-        this.piecePositions = {};
-        {
-            let pos: pos = 0;
-            for (const char of piecePositions) {
-                let emptySquares = parseInt(char);
-                if (emptySquares) {
-                    pos += emptySquares
-                } else if (char === '/') {
-                    continue;
-                } else {
-                    this.piecePositions[pos] = new Piece(char as pieceType, pos).uid;
-                    pos++;
-                }
+        let board = position.board;
+        let pieces = this.pieces;
+    
+        // place new or existing pieces on the board
+        for (const [index, id] of items(board)) {
+            if (!(id in pieces)) {
+                let elem = this.makePiece(id);
+                this.place(elem, index);
+            } else {
+                let elem = pieces[id];
+                this.place(elem, index, { 'smooth': true });
             }
         }
     
-        this.whiteToMove = toMove.toLowerCase() === 'w';
-    
-        this.castling = {
-            whiteShort: castling.includes('K'),
-            whiteLong: castling.includes('Q'),
-            blackShort: castling.includes('k'),
-            blackLong: castling.includes('q')
-        };
-    
-        if (enPassant === '-') {
-            this.enPassant = null;
-        } else {
-            this.enPassant = [
-                ChessPosition.
-                    COLUMN_TRANSPOSITION_TABLE[enPassant[0]],
-                ChessPosition.
-                    ROW_TRANSPOSITION_TABLE[enPassant[1]]
-            ];
+        // drop non existing pieces off the board
+        for (const elem of values(pieces)) {
+            let index = parseInt(elem.data('index'));
+            if (!(index in board) || (parseInt(elem.data('id')) !== board[index])) {
+                this.drop(elem);
+            }
         }
     }
     //[cf]
 
-    public piecePositions: {[pos: number]: uid};
-    public whiteToMove: boolean;
-    public castling: {
-        whiteShort: boolean, whiteLong: boolean,
-        blackShort: boolean, blackLong: boolean,
-    };
-    public enPassant: [columnIndex, rowIndex] | null;
+    //[of]:readMouseinfos()
+    private readMouseinfos( event:dragdropevent ):Mouseinfos|null {
+        let x = event.pageX - event.delegateTarget.offsetLeft;
+        let y = event.pageY - event.delegateTarget.offsetTop;
+        let boardsize = this.dimensions.boardsize;
+        if (x < 0 || y < 0 || x > boardsize || y > boardsize) {
+            return null;
+        }
+    
+        let halfpiecesize = this.dimensions.halfpiecesize;
+        let dragX = x - halfpiecesize;
+        let dragY = y - halfpiecesize;
+    
+        let piecesize = this.dimensions.piecesize;
+        let colindex = Math.floor(x / piecesize);
+        let rowindex = Math.floor(y / piecesize);
+        let index = 8 * rowindex + colindex;
+        
+        return {
+            x:x, y:y,
+            dragX:dragX, dragY:dragY,
+            index: index, colindex:colindex, rowindex:rowindex,
+        };
+    }
+    //[cf]
+    //[of]:updateDimensions()
+    private updateDimensions():Boarddimensions {
+        let boardsize = Math.round(this.elem.width() || 300);
+        let piecesize = Math.round(boardsize / 8);
+        let halfpiecesize = Math.round(piecesize / 2);
+        return {
+            boardsize:boardsize,
+            piecesize:piecesize,
+            halfpiecesize:halfpiecesize
+        }
+    }
+    //[cf]
+    //[of]:togglePromo()
+    private promopiece:Piece|null = null;
+    private togglingpromo:Function|null = null;
+    
+    private togglePromo(on:boolean, lastrank:boolean):void {
+        if (on) {
+            if (!this.togglingpromo) {
+                let piece = HASH.get(parseInt(this.grabbedpiece.data('id')));
+                if (
+                    piece.type === 'p' &&
+                    (
+                        (lastrank && piece.iswhite) ||
+                        (!lastrank && !piece.iswhite)
+                    )
+                )
+                this.togglingpromo = setInterval(()=>{
+                    console.log(piece);
+                },500);
+            }
+        } else {
+            this.promopiece = null;
+            clearInterval(this.togglingpromo);
+        }
+    //[c]    ~ let piece = HASH.get(parseInt(self.grabbedpiece.data('id')))
+    //[c]    ~ console.log(piece);
+    
+    }
+    //[cf]
+}
 
-    public clone() {
+interface Mouseinfos {
+    x:pixels, y:pixels,
+    dragX:pixels, dragY:pixels,
+    index:boardindex, colindex:colindex, rowindex:rowindex,
+}
+
+interface Boarddimensions {
+    boardsize: pixels,
+    piecesize: pixels,
+    halfpiecesize: pixels
+}
+//[cf]
+//[c])
+
+//[c]( Constants
+//[of]:STARTFEN
+const STARTFEN : fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+//[cf]
+//[of]:COLTRANSTABLE
+const COLTRANSTABLE:{ [ key:string ]:int } = {
+    'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5, 'g': 6, 'h': 7,
+};
+//[cf]
+//[of]:ROWTRANSTABLE
+const ROWTRANSTABLE:{ [ key:string ]:int } = {
+    '8': 0, '7': 1, '6': 2, '5': 3, '4': 4, '3': 5, '2': 6, '1': 7,
+};
+//[cf]
+//[of]:REVCOLTRANSTABLE
+const REVCOLTRANSTABLE:string = 'abcdefgh';
+//[cf]
+//[of]:REVROWTRANSTABLE
+const REVROWTRANSTABLE:string = '87654321';
+//[cf]
+//[c])
+
+//[c]( Interfaces
+//[of]:Chessposition
+interface Chessposition {
+    board:chessboard,
+    whitetomove:boolean,
+    castling:{
+        whiteshort:boolean,
+        whitelong:boolean,
+        blackshort:boolean,
+        blacklong:boolean
+    },
+    enpassant:boardindex|null
+}
+
+//[of]:positionFromFen()
+function positionFromFen( fen:fen ):Chessposition {
+
+    let [
+        fenpieces,
+        fentomove,
+        fencastling,
+        fenenpassant
+    ] = fen.trim().split(/\s+/);
+    
+    let board:chessboard = { };
+    let curindex = 0;
+    for (const char of fenpieces) {
+        let empty = parseInt(char);
+        if (empty) {
+            curindex += empty;
+        } else if (char === '/') {
+            continue;
+        } else {
+            board[curindex] = makePiece(char as fenpiecename, curindex);
+            curindex++;
+        }
     }
 
-    //[of]:static
-    static readonly STARTFEN: fen =
-    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-    
-    static readonly COLUMN_TRANSPOSITION_TABLE: { [key: string]: int } = {
-        'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5, 'g': 6, 'h': 7,
-    };
-    
-    static readonly ROW_TRANSPOSITION_TABLE: { [key: string]: int } = {
-        '8': 0, '7': 1, '6': 2, '5': 3, '4': 4, '3': 5, '2': 6, '1': 7,
-    };
-    
-    static readonly PIECE_TRANSPOSITION_TABLE: {
-        [key: string]: [string, string]
-    } = {
-        'k': ['b', 'k'], 'q': ['b', 'q'], 'r': ['b', 'r'], 'b': ['b', 'b'],
-        'n': ['b', 'n'], 'p': ['b', 'p'], 'K': ['w', 'k'], 'Q': ['w', 'q'],
-        'R': ['w', 'r'], 'B': ['w', 'b'], 'N': ['w', 'n'], 'P': ['w', 'p'],
-    };
-    //[cf]
+    let whitetomove = fentomove.toLowerCase() === 'w';
 
+    let castling = {
+        whiteshort: fencastling.includes('K'),
+        whitelong: fencastling.includes('Q'),
+        blackshort: fencastling.includes('k'),
+        blacklong: fencastling.includes('q')
+    };
+
+    let enpassant = null;
+    if (fenenpassant !== '-') {
+        enpassant = coordsToIndex(
+            COLTRANSTABLE[fenenpassant[0]],
+            ROWTRANSTABLE[fenenpassant[1]],
+        );
+    }
+    
+    return {
+        board: board,
+        whitetomove: whitetomove,
+        castling:castling,
+        enpassant:enpassant
+    };
 }
+//[cf]
 //[cf]
 //[of]:Piece
-class Piece {
+interface Piece {
+    type: piecetype;
+    id: uid;
+    index: boardindex;
+    iswhite: boolean;
+    domelem?: pieceelem
+}
 
-    //[of]:constructor()
-    constructor(pieceType: pieceType, pos: pos) {
-        this.pieceType = pieceType;
-        this.isWhitePiece = pieceType !== pieceType.toLowerCase();
-        this.pos = pos;
-        this.uid = HASH.add(this);
+function makePiece( name:fenpiecename, index:boardindex ) : uid {
+    let piecetype = name.toLowerCase();
+    if (!"kqrbnp".includes(piecetype)) {
+        throw new Error("Illegal piecetype");
     }
-    //[cf]
+    let iswhite = piecetype !== name;
+    let piece:Piece = {
+        type: piecetype as piecetype,
+        id: -1,
+        index: index,
+        iswhite: iswhite,
+    };
 
-    public pieceType: pieceType;
-    public isWhitePiece: boolean;
-    public pos: pos;
-    public uid: uid;
-
+    let id = piece.id = HASH.add(piece);
+    return id;
 }
 //[cf]
+//[c])
 
-//[of]:Tools
+//[c]( Iterators
+type key = any;
+type value = any;
 //[of]:items()
-/**
- * Iterate over the keys and values of an iterable
- * ('iterable' in the Python sense).
- * */
+/** Iterate over the keys and values of an 'iterable' (in the Python sense) */
 function* items(
     iterable: Map<key, value> | Iterable<value> | Object
 ): IterableIterator<[key, value]> {
@@ -593,101 +665,165 @@ function* items(
     }
 }
 //[cf]
+//[of]:values()
+/** Iterate over the values of an 'iterable' (in the Python sense) */
+function* values(
+    iterable: Map<key, value> | Iterable<value> | Object
+): IterableIterator<value> {
 
+    if (iterable instanceof Map) {
+        for (const value of iterable.values()) {
+            yield value;
+        }
+    }
+
+    else if (
+        // sorted by usage frequency
+        iterable instanceof Array
+        || typeof iterable === 'string'
+        || iterable instanceof Set
+        || iterable instanceof String
+    ) {
+        for (const value of iterable) {
+            yield value;
+        }
+    }
+
+    else if (iterable instanceof Object) {
+        for (const value of Object.values(iterable)) {
+            yield value;
+        }
+    }
+
+    else {
+        throw new Error(`Can not be used with '${typeof iterable}' type`);
+    }
+}
 //[cf]
+//[c])
+//[c]
+//[c]( Misc Tools
+//[of]:indexToCoords()
+function indexToCoords( index:boardindex ):[ colindex, rowindex ] {
+    let x = index % 8;
+    return [ x, (index-x)/8 ];
+}
+//[cf]
+//[of]:coordsToIndex()
+function coordsToIndex( x:colindex, y:rowindex ):boardindex {
+    return y * 8 + x;
+}
+//[cf]
+//[of]:coordToPercent()
+function coordToPercent( coord:index ):string {
+    return coord * 12.5 + '%';
+}
+//[cf]
+//[of]:clone()
+/** https://jsperf.com/cloning-an-object/79 */
+function clone( object:any ):any {
+    return JSON.parse(
+        JSON.stringify(object)
+    );
+}
+//[cf]
+//[of]:handled()
+function handled( event:dragdropevent ):boolean {
+    event.preventDefault();
+    event.stopPropagation();
+    return false;
+}
+//[cf]
+//[of]:squarename()
+function squarename( index:boardinex|null ):string|null {
+    if(index === null) {
+        return null;
+    }
+    let [x,y] = indexToCoords(index);
+    return REVCOLTRANSTABLE[x] + REVROWTRANSTABLE[y];
+}
+//[cf]
+//[c])
+
+//[c]( Types
+//[of]:int
+/** 'it shall be an integer, not a float' */
+type int = number;
+//[cf]
+//[of]:pixels
+/** 'these are pixels' */
+type pixels = int;
+//[cf]
+//[of]:fen
+/** A chess position encoded in Forsyth-Edwards notation. E.g. 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' for the starting position in chess games. */
+type fen = string;
+//[cf]
+//[of]:fenpiecename
+/** Short piece names used in FENs. Big letters are white pieces */
+type fenpiecename = 'K'|'Q'|'R'|'B'|'N'|'P'|'k'|'q'|'r'|'b'|'n'|'p';
+//[cf]
+//[of]:piecetype
+/** Short names for king, queen, rook, bishop, knight, pawn. */
+type piecetype = 'k'|'q'|'r'|'b'|'n'|'p';
+//[cf]
+//[of]:chessboard
+/** The internal chessboard representation. It does only contain indices for squares occupied by pieces. */
+type chessboard = { [ index:number ]:uid };
+//[cf]
+//[of]:boardindex
+/** The unit denoting the index of a square in the internal chessboard representation. 0 to 63. Equivalent to `rowindex * 8 + colindex`. 0 is 'a8' in algebraic chess notation. This is the top left square, when white is on bottom. 63 is 'h1', the bottom right square. Some functions also use 'index' to denote that it can be either a colindex or a rowindex. */
+type boardindex = int;
+//[cf]
+//[of]:colindex
+/** Horizontal index on an abstract chessboard. 0 to 7. Would be 'a' to 'h' in algebraic chess notation. */
+type colindex = int;
+//[cf]
+//[of]:rowindex
+/** Vertical index on an abstract chessboard. 0 to 7. Would be '8' to '1' in algebraic chess notation. */
+type rowindex = int;
+//[cf]
+//[of]:index
+/** either a colindex or a rowindex */
+type index = colindex|rowindex;
+//[cf]
+//[of]:uid
+/** An autogenerated unique positive integer pointing to a piece (see the Piece interface). The pieces are saved in a hash, because pieces can be taken from the board (e.g. when a piece takes another piece) and they can be added back to the board (e.g. when navigating back to a previous position). This allows smooth animations of piece movements. Both the Piece interface and the jQuery dom element for that piece on the board have a reference to the uid (`<piece>.id` and `<domelem>.data('id')`). To get the Piece for a specific uid do `HASH.get(<uid>)` */
+type uid = int;
+//[cf]
+//[of]:elemid
+/** an element id in CSS notation. E.g. '#chessboard'. */
+type elemid = string;
+//[cf]
+//[of]:elem
+/** a jQuery dom element */
+type elem = JQuery<HTMLElement>;
+//[cf]
+//[of]:boardelem
+/** the jQuery dom element for the chessboard */
+type boardelem = elem;
+//[cf]
+//[of]:pieceelem
+/** the jQuery dom element for a piece on the chessboard */
+type pieceelem = elem;
+//[cf]
+//[of]:dragdropevent
+/** Used in functions handling piece dragging */
+type dragdropevent = mousedownevent|mousemoveevent|mouseupevent;
+
+type mousedownevent = JQuery.MouseDownEvent
+type mousemoveevent = JQuery.MouseMoveEvent
+type mouseupevent = JQuery.MouseUpEvent
+//[cf]
+//[c])
 
 window.onload = function () {
     $('#please-enable-js-message').remove();
-
     let state = new State();
     new Board('#board', state);
 //[c]    ~ new ChessNotation('#notation', state);
 //[c]    ~ new ChessToolbar('#toolbar', state);
-
     state.reset();
 }
-
-//[of]:Type defs
-/**
- * Document that it shall be an integer, not a float.
- * E.g. 1 but not 1.5
- * */
-type int = number;
-
-/** A rowIndex or a columnIndex. */
-type index = columnIndex | rowIndex;
-
-/**
- * Horizontal index on a chessboard. 0 to 7
- * ('a' to 'h' in algebraic chess notation).
- * */
-type columnIndex = int;
-
-/**
- * Vertical index on a chessboard. 0 to 7
- * ('8' to '1' in algebraic chess notation).
- * */
-type rowIndex = int;
-
-/**
- * flattened index on a chessboard. 0 to 63.
- * Equivalent to `rowIndex * 8 + columnIndex`
- * */
-type pos = int
-
-/** An autogenerated uid pointing to the actual chess piece. */
-type uid = int;
-
-/** Used to document that the unit is pixels */
-type pixels = int;
-
-/**
- * A chess position encoded in Forsyth-Edwards notation. E.g.
- * 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1' for the start
- * position of a chess game.
- * */
-type fen = string;
-
-/** A dom elements id attribute in CSS notation. E.g. '#chessboard'. */
-type domElementId = string;
-
-/** Used in functions operating with events returned by JQuery. */
-type JQueryMouseEvent =
-    JQuery.MouseDownEvent
-    | JQuery.MouseMoveEvent
-    | JQuery.MouseUpEvent;
-
-/**
- * Correspondents to the piece identifiers used in FENs.
- * E.g. 'r' for a black rook or 'P' for a white pawn. 
- * */
-type pieceType =
-    'K' | 'Q' | 'R' | 'B' | 'N' | 'P'
-    | 'k' | 'q' | 'r' | 'b' | 'n' | 'p';
-
-/** the key when iterating about the items of an iterable */
-type key = any;
-
-/** the value when iterating about the items of an iterable */
-type value = any;
-
-/** used in -> Board */
-interface Dimensions {
-    boardSize: pixels,
-    pieceSize: pixels,
-    halfPieceSize: pixels
-}
-
-//[c]~ interface ChessPosition {
-//[c]    ~ piecePositions: {[pos: number]: uid},
-//[c]    ~ whiteToMove: boolean,
-//[c]    ~ castling: {
-//[c]        ~ whiteShort: boolean, whiteLong: boolean,
-//[c]        ~ blackShort: boolean, blackLong: boolean
-//[c]    ~ },
-//[c]    ~ enPassant: pos
-//[c]~ }
-//[cf]
 
 //[of]:~ ChessNotation
 //[c]~ class ChessNotation extends Observer {
