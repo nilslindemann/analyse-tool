@@ -347,7 +347,7 @@ class Board extends Observer {
             }
         });
         elem.on('mouseup', function( event:mouseupevent ) {
-            self.togglePromo(false);
+            self.togglePromo(false, false);
             self.release(self.readMouseinfos(event));
             return handled(event);
         });
@@ -470,10 +470,10 @@ class Board extends Observer {
     //[cf]
     //[of]:togglePromo()
     private promopiece:Piece|null = null;
-    private togglingpromo:Function|null = null;
+    private togglingpromo:number|undefined;
     
     private togglePromo(on:boolean, lastrank:boolean):void {
-        if (on) {
+        if (on && this.grabbedpiece) {
             if (!this.togglingpromo) {
                 let piece = HASH.get(parseInt(this.grabbedpiece.data('id')));
                 if (
@@ -484,7 +484,9 @@ class Board extends Observer {
                     )
                 )
                 this.togglingpromo = setInterval(()=>{
-                    console.log(piece);
+                    // todo
+                    this.promopiece = null
+                    console.log(this.promopiece);
                 },500);
             }
         } else {
@@ -735,7 +737,7 @@ function handled( event:dragdropevent ):boolean {
 }
 //[cf]
 //[of]:squarename()
-function squarename( index:boardinex|null ):string|null {
+function squarename( index:boardindex|null ):string|null {
     if(index === null) {
         return null;
     }
