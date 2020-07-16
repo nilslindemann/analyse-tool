@@ -303,33 +303,57 @@ class Board extends Observer {
         this.promochooserwhite = $('promo-chooser-white', elem);
         this.promochooserblack = $('promo-chooser-black', elem);
     
-    //[c]    Todo: Better handling of pieces dragged outside of the board
-    //[c]    (mouse leaves window)
     //[c]    Todo: Implement 'drop off piece' functionality
         let self = this;
-        //[of]:board mouse down handler
+        //[of]:board  mouse down handler
         elem.on('mousedown', 'chess-piece', function( event:mousedownevent ) {
             self.grab($(this), self.readMouseinfos(event));
             return handled(event);
         });
         //[cf]
-        //[of]:board mouse move handler
-        elem.on('mousemove', function( event:mousemoveevent ) {
+        //[of]:board  mouse move handler
+        $('body').on('mousemove', function( event:mousemoveevent ) {
             if (self.grabbedpiece) {
                 self.drag(self.readDraginfos(event));
                 return handled(event);
             }
         });
+        
+        
         //[cf]
-        //[of]:board mouse up handler
+        //[of]:body   mouse leave handler
+        $('body').on('mouseleave', function() {
+            if (self.grabbedelem) {
+                self.grabbedelem.hide();
+            }
+        });
+        //[cf]
+        //[of]:body   mouse enter handler
+        $('body').on('mouseenter', function() {
+            if (self.grabbedelem) {
+                self.grabbedelem.show();
+            }
+        });
+        //[cf]
+        //[of]:board  mouse up handler
         elem.on('mouseup', function( event:mouseupevent ) {
             self.release(self.readMouseinfos(event));
+            return handled(event);
+        });
+        //[cf]
+        //[of]:window mouse up handler
+        $(window).on('mouseup', function( event:mouseupevent ) {
+            if (self.grabbedelem) {
+                self.grabbedelem.show();
+            }
+            self.reset();
             return handled(event);
         });
         //[cf]
         //[of]:window rezise handler
         $(window).on('resize', function() {
             self.dimensions = self.updateDimensions();
+            return handled(event);
         });
         //[cf]
     }
@@ -362,7 +386,6 @@ class Board extends Observer {
     
     }
     //[cf]
-
     //[of]:grab()
     /** Mouse down over piece */
     private grab( elem:pieceelem, mouseinfos:Mouseinfos|null ):this {
@@ -453,6 +476,29 @@ class Board extends Observer {
     }
     
     //[cf]
+    //[of]:reset()
+    /** mouse up in weird locations */
+    private reset():this {
+    
+        let elem = this.grabbedelem;
+    
+        if (elem) {
+            elem.css({
+                zIndex: 1
+            });
+            
+            this.grabbedelem = null;
+            this.grabbedpiece = null;
+    
+            this.promochooserblack.hide();
+            this.promochooserwhite.hide();
+    
+            this.update();
+        }
+        return this;
+    }
+    
+    //[cf]
     //[of]:place()
     /** make sure a piece is placed according to its index */
     private place(
@@ -531,7 +577,7 @@ class Board extends Observer {
                 promopiece = promopiece.toUpperCase();
             }
         }
-        
+    
         return {
             promopiece:promopiece as promopiece,
             x:x, y:y,
@@ -541,20 +587,15 @@ class Board extends Observer {
     }
     //[cf]
     //[of]:readDraginfos()
-    /** light version of `readMouseinfos()`, used when `drag()`ging a piece */
+    /** used when `drag()`ging a piece */
     private readDraginfos( event:dragdropevent ):Draginfos|null {
-        let x = event.pageX - event.delegateTarget.offsetLeft;
-        let y = event.pageY - event.delegateTarget.offsetTop;
-        let boardsize = this.dimensions.boardsize;
-        if (x < 0 || y < 0 || x > boardsize || y > boardsize) {
-            return null;
-        }
-    
+        let offset = this.elem.offset();
         let halfpiecesize = this.dimensions.halfpiecesize;
-        let dragX = x - halfpiecesize;
-        let dragY = y - halfpiecesize;
         
-        return { dragX:dragX, dragY:dragY };
+        return {
+            dragX: event.pageX - offset.left - halfpiecesize,
+            dragY: event.pageY - offset.top - halfpiecesize
+        };
     }
     //[cf]
     //[of]:updateDimensions()
