@@ -5,14 +5,14 @@
 let HASH = new class {
     constructor() {
         this.entries = {};
-        this.uid = 0;
+        this.id = 0;
     }
     add(thing) {
-        this.entries[++this.uid] = thing;
-        return this.uid;
+        this.entries[++this.id] = thing;
+        return this.id;
     }
-    get(uid) {
-        return this.entries[uid];
+    get(id) {
+        return this.entries[id];
     }
 };
 //[cf]
@@ -46,10 +46,10 @@ class State {
         let board = position.board;
         let castling = position.castling;
         let whitetomove = position.whitetomove;
-        let fromuid = board[from];
-        let touid = board[to];
-        let frompiece = HASH.get(fromuid);
-        let topiece = HASH.get(touid);
+        let fromid = board[from];
+        let toid = board[to];
+        let frompiece = HASH.get(fromid);
+        let topiece = HASH.get(toid);
         let iswhite = frompiece.iswhite;
         let enpassant = position.enpassant;
         let newenpassant = null;
@@ -120,7 +120,7 @@ class State {
         }
         //[cf]
         //[of]:en passant
-        if (!movemade && enpassant && !touid && frompiece.type == 'p' && to == enpassant &&
+        if (!movemade && enpassant && !toid && frompiece.type == 'p' && to == enpassant &&
             ((iswhite && whitetomove &&
                 (from == enpassant + 7 || from == enpassant + 9) &&
                 HASH.get(board[enpassant + 8]).type == 'p' &&
@@ -141,7 +141,7 @@ class State {
         }
         //[cf]
         //[of]:white pawn moves two squares from start position
-        if (!movemade && !touid && frompiece.type == 'p' && frompiece.iswhite &&
+        if (!movemade && !toid && frompiece.type == 'p' && frompiece.iswhite &&
             from > 47 && from < 56 && to == from - 16) {
             this.movepiece(from, to);
             movemade = true;
@@ -152,7 +152,7 @@ class State {
         }
         //[cf]
         //[of]:black pawn moves two squares from start position
-        if (!movemade && !touid && frompiece.type == 'p' && !frompiece.iswhite &&
+        if (!movemade && !toid && frompiece.type == 'p' && !frompiece.iswhite &&
             from > 7 && from < 16 && to == from + 16) {
             this.movepiece(from, to);
             movemade = true;
@@ -164,15 +164,17 @@ class State {
         //[cf]
         //[of]:pawn promotion
         if (!movemade && promopiece) {
-            board[to] = makePiece(promopiece, to);
-            delete board[from];
+            if (!(to in board)) {
+                board[to] = makePiece(promopiece, to);
+                delete board[from];
+                waslegalmove = true;
+            }
             movemade = true;
-            waslegalmove = true;
         }
         //[cf]
         //[of]:normal move
         if (!movemade) {
-            if (!(touid && frompiece.iswhite === topiece.iswhite)) {
+            if (!(toid && frompiece.iswhite === topiece.iswhite)) {
                 this.movepiece(from, to);
                 movemade = true;
                 waslegalmove = true; // todo
@@ -192,9 +194,9 @@ class State {
     //[of]:movepiece()
     movepiece(from, to) {
         let board = this.position.board;
-        let fromuid = board[from];
-        HASH.get(fromuid).index = to;
-        board[to] = fromuid;
+        let fromid = board[from];
+        HASH.get(fromid).index = to;
+        board[to] = fromid;
         delete board[from];
     }
     //[cf]
@@ -225,25 +227,32 @@ class Board extends Observer {
         super(state);
         this.pieces = {};
         this.grabbedelem = null;
-        this.grabbedpiece = null;
         let elem = this.elem = $(boardid);
-        this.dimensions = this.updateDimensions();
+        this.updateDimensions();
         this.promochooserwhite = $('promo-chooser-white', elem);
         this.promochooserblack = $('promo-chooser-black', elem);
         //[c]    Todo: Implement 'drop off piece' functionality
         let self = this;
         //[of]:board  mouse down handler
         elem.on('mousedown', 'chess-piece', function (event) {
-            self.grab($(this), self.readMouseinfos(event));
+            self.grab($(this), event);
             return handled(event);
         });
         //[cf]
-        //[of]:board  mouse move handler
-        $('body').on('mousemove', function (event) {
-            if (self.grabbedpiece) {
-                self.drag(self.readDraginfos(event));
-                return handled(event);
+        //[of]:board  mouse up handler
+        elem.on('mouseup', function (event) {
+            if (self.grabbedelem) {
+                self.release(event);
             }
+            return handled(event);
+        });
+        //[cf]
+        //[of]:body   mouse move handler
+        $('body').on('mousemove', function (event) {
+            if (self.grabbedelem) {
+                self.drag(event);
+            }
+            return handled(event);
         });
         //[cf]
         //[of]:body   mouse leave handler
@@ -260,12 +269,6 @@ class Board extends Observer {
             }
         });
         //[cf]
-        //[of]:board  mouse up handler
-        elem.on('mouseup', function (event) {
-            self.release(self.readMouseinfos(event));
-            return handled(event);
-        });
-        //[cf]
         //[of]:window mouse up handler
         $(window).on('mouseup', function (event) {
             if (self.grabbedelem) {
@@ -277,8 +280,7 @@ class Board extends Observer {
         //[cf]
         //[of]:window rezise handler
         $(window).on('resize', function () {
-            self.dimensions = self.updateDimensions();
-            return handled(event);
+            self.updateDimensions();
         });
         //[cf]
     }
@@ -307,95 +309,172 @@ class Board extends Observer {
             }
         }
         //[cf]
-    }
-    //[cf]
-    //[of]:grab()
-    /** Mouse down over piece */
-    grab(elem, mouseinfos) {
-        this.grabbedelem = elem;
-        let piece = this.grabbedpiece = getpiece(elem);
-        if (mouseinfos) {
-            elem.css({
-                zIndex: 1000,
-                top: mouseinfos.dragY,
-                left: mouseinfos.dragX,
-            });
-            //[of]:pawn promotion
-            if (piece.type == 'p') {
-                let index = piece.index;
-                let board = this.state.position.board;
-                if (piece.iswhite && index > 7 && index < 16 && !(index - 8 in board)) {
-                    let promochooser = this.promochooserwhite;
-                    let [x, y] = indexToCoords(index - 8);
-                    promochooser.css({
-                        top: coordToPercent(y),
-                        left: coordToPercent(x)
-                    });
-                    promochooser.show();
-                }
-                else if (!piece.iswhite && index > 47 && index < 56 && !(index + 8 in board)) {
-                    let promochooser = this.promochooserblack;
-                    let [x, y] = indexToCoords(index + 8);
-                    promochooser.css({
-                        top: coordToPercent(y),
-                        left: coordToPercent(x)
-                    });
-                    promochooser.show();
-                }
-            }
-            //[cf]
-        }
         return this;
     }
     //[cf]
-    //[of]:drag()
-    /** moving mouse while piece `grab()`bed */
-    drag(draginfos) {
-        let elem = this.grabbedelem;
-        if (elem && draginfos) {
-            elem.css({
-                zIndex: 1000,
-                top: draginfos.dragY,
-                left: draginfos.dragX,
-            });
+    //[of]:updateDimensions()
+    /** read out the board size and piece size on document load and -resize */
+    updateDimensions() {
+        {
+            let offset = this.elem.offset();
+            let x = offset ? offset.left : 0;
+            let y = offset ? offset.top : 0;
+            this.position = { x: x, y: y };
         }
-        return this;
-    }
-    //[cf]
-    //[of]:release()
-    /** mouse up while piece `grab()`bed */
-    release(mouseinfos) {
-        let elem = this.grabbedelem;
-        if (elem) {
-            this.promochooserblack.hide();
-            this.promochooserwhite.hide();
-            this.grabbedelem = null;
-            this.grabbedpiece = null;
-        }
-        if (elem && mouseinfos) {
-            elem.css({
-                zIndex: 1
-            });
-            let to = mouseinfos.index;
-            let from = getindex(elem);
-            this.state.makemove(from, to, mouseinfos.promopiece);
+        let size = this.elem.width();
+        if (!size) {
+            throw new Error('could not detect board size');
         }
         else {
-            this.update();
+            size = this.size = Math.round(size);
+            let piecesize = this.piecesize = Math.round(size / 8);
+            this.halfpiecesize = Math.round(piecesize / 2);
         }
         return this;
     }
     //[cf]
+    //[of]:grab(pieceelem, mousedownevent)
+    /** grab a piece on the board */
+    grab(elem, event) {
+        this.grabbedelem = elem;
+        let mousepos = this.mousepos(event);
+        this.aligncursor(elem, mousepos);
+        this.adjustpromochooser(elem, mousepos);
+        return this;
+    }
+    //[cf]
+    //[of]:drag(mousemoveevent)
+    /** drag a grabbed piece */
+    drag(event) {
+        let elem = this.grabbedelem;
+        if (elem) {
+            let mousepos = this.mousepos(event);
+            this.aligncursor(elem, mousepos);
+            this.adjustpromochooser(elem, mousepos);
+        }
+        return this;
+    }
+    //[cf]
+    //[of]:adjustpromochooser(pieceelem, PixelLocation)
+    adjustpromochooser(elem, mousepos) {
+        let piece = getpiece(elem);
+        if (piece.type == 'p') {
+            let from = piece.index;
+            let to = this.getindex(mousepos);
+            let iswhite = piece.iswhite;
+            let board = this.state.position.board;
+            if (iswhite) {
+                if (to < 8 && !(to in board)) {
+                    this.showpromo(this.promochooserwhite, to);
+                }
+                else if (to > 7 && to < 16 && !(to - 8 in board)) {
+                    this.showpromo(this.promochooserwhite, to - 8);
+                }
+                else if (to > 15) {
+                    this.hidepromo();
+                }
+            }
+            else {
+                if (to > 55 && !(to in board)) {
+                    this.showpromo(this.promochooserblack, to);
+                }
+                else if (to > 47 && to < 56 && !(to + 8 in board)) {
+                    this.showpromo(this.promochooserblack, to + 8);
+                }
+                else if (to < 48) {
+                    this.hidepromo();
+                }
+            }
+        }
+        return this;
+    }
+    //[cf]
+    //[of]:showpromo(elem, boardindex)
+    /** Show the promotion indicator */
+    showpromo(chooser, index) {
+        let [x, y] = indexToCoords(index);
+        chooser.css({
+            top: coordToPercent(y),
+            left: coordToPercent(x)
+        });
+        chooser.show();
+        return this;
+    }
+    //[cf]
+    //[of]:hidepromo()
+    hidepromo() {
+        this.promochooserblack.hide();
+        this.promochooserwhite.hide();
+        return this;
+    }
+    //[cf]
+    //[of]:release(mouseupevent)
+    /** release a grabbed piece */
+    release(event) {
+        let elem = this.grabbedelem;
+        if (elem) {
+            this.hidepromo();
+            elem.css({ zIndex: 1 });
+            let mousepos = this.mousepos(event, { strict: true });
+            if (mousepos) {
+                let [from, to, promopiece] = this.getmove(elem, mousepos);
+                this.state.makemove(from, to, promopiece);
+            }
+            else {
+                this.update();
+            }
+            this.grabbedelem = null;
+        }
+        return this;
+    }
+    //[of]:getmove(elem, mousepos)
+    getmove(elem, mousepos) {
+        let piece = getpiece(elem);
+        let from = piece.index;
+        let to = this.getindex(mousepos);
+        let promopiece = null;
+        {
+            let iswhite = piece.iswhite;
+            if (piece.type == 'p' && ((iswhite && to < 8) ||
+                (!iswhite && to > 55))) {
+                promopiece = this.getpromopiece(mousepos);
+            }
+        }
+        return [from, to, promopiece];
+    }
+    //[of]:getpromopiece(PixelLocation)
+    /** read the desired promopiece from where the mouse was released */
+    getpromopiece(mouse) {
+        let x = mouse.x;
+        let y = mouse.y;
+        let row = this.getrow(mouse);
+        let col = this.getcol(mouse);
+        let piecesize = this.piecesize;
+        let halfpiecesize = this.halfpiecesize;
+        let promocolsep = col * piecesize + halfpiecesize;
+        let promorowsep = row * piecesize + halfpiecesize;
+        let promopiece = (x < promocolsep)
+            ? (y < promorowsep)
+                ? 'q'
+                : 'b'
+            : (y < promorowsep)
+                ? 'r'
+                : 'n';
+        if (row === 0) {
+            promopiece = promopiece.toUpperCase();
+        }
+        return promopiece;
+    }
+    //[cf]
+    //[cf]
+    //[cf]
     //[of]:reset()
-    /** mouse up in weird locations */
+    /** a mouse up in weird locations calls this */
     reset() {
         let elem = this.grabbedelem;
         if (elem) {
-            elem.css({
-                zIndex: 1
-            });
+            elem.css({ zIndex: 1 });
             this.grabbedelem = null;
-            this.grabbedpiece = null;
             this.promochooserblack.hide();
             this.promochooserwhite.hide();
             this.update();
@@ -403,8 +482,8 @@ class Board extends Observer {
         return this;
     }
     //[cf]
-    //[of]:place()
-    /** make sure a piece is placed according to its index */
+    //[of]:place(pieceelem, boardindex?)
+    /** place a piece according to its index */
     place(elem, index, options = { smooth: false }) {
         if (!index) {
             index = getpiece(elem).index;
@@ -426,14 +505,63 @@ class Board extends Observer {
         return this;
     }
     //[cf]
-    //[of]:dropoff()
+    //[of]:dropoff(pieceelem)
     /** remove a piece from the board (the piece actually just gets hidden) */
     dropoff(elem) {
-        elem.addClass('hidden');
+        elem.hide();
         return this;
     }
     //[cf]
-    //[of]:makePiece()
+    //[of]:aligncursor(pieceelem, PixelLocation)
+    /** align a piece at the cursor */
+    aligncursor(elem, mousepos) {
+        let halfpiecesize = this.halfpiecesize;
+        elem.css({
+            zIndex: 1000,
+            top: mousepos.y - halfpiecesize,
+            left: mousepos.x - halfpiecesize,
+        });
+        return this;
+    }
+    //[cf]
+    //[of]:mousepos(dragdropevent)
+    /** return the mouse position relative to the board. Returns null when
+    strict === true and the mouse is not inside the board */
+    mousepos(event, options = { strict: false }) {
+        let position = this.position;
+        let x = event.pageX - position.x;
+        let y = event.pageY - position.y;
+        if (options.strict) {
+            let boardsize = this.size;
+            if (x < 0 || y < 0 || x > boardsize || y > boardsize) {
+                return null;
+            }
+        }
+        return {
+            x: x,
+            y: y
+        };
+    }
+    //[cf]
+    //[of]:getindex(PixelLocation)
+    /** get the board index correlating to this mouse position */
+    getindex(mouse) {
+        return 8 * this.getrow(mouse) + this.getcol(mouse);
+    }
+    //[cf]
+    //[of]:getrow(PixelLocation)
+    /** get the row index correlating to this mouse position */
+    getrow(mouse) {
+        return Math.floor(mouse.y / this.piecesize);
+    }
+    //[cf]
+    //[of]:getcol(PixelLocation)
+    /** get the column index correlating to this mouse position */
+    getcol(mouse) {
+        return Math.floor(mouse.x / this.piecesize);
+    }
+    //[cf]
+    //[of]:makePiece(uid)
     /** create the dom element for a piece and append it to the board */
     makePiece(id) {
         let piece = HASH.get(id);
@@ -444,68 +572,15 @@ class Board extends Observer {
         this.elem.append(elem);
         return elem;
     }
-    //[cf]
-    //[of]:readMouseinfos()
-    /** read the needed mouse infos from an event. Used in `grab()` and `release()` */
-    readMouseinfos(event) {
-        let x = event.pageX - event.delegateTarget.offsetLeft;
-        let y = event.pageY - event.delegateTarget.offsetTop;
-        let boardsize = this.dimensions.boardsize;
-        if (x < 0 || y < 0 || x > boardsize || y > boardsize) {
-            return null;
-        }
-        let halfpiecesize = this.dimensions.halfpiecesize;
-        let dragX = x - halfpiecesize;
-        let dragY = y - halfpiecesize;
-        let piecesize = this.dimensions.piecesize;
-        let colindex = Math.floor(x / piecesize);
-        let rowindex = Math.floor(y / piecesize);
-        let index = 8 * rowindex + colindex;
-        let promopiece = null;
-        if (rowindex === 0 || rowindex === 7) {
-            promopiece = (x < (colindex * piecesize + halfpiecesize))
-                ? (y < (rowindex * piecesize + halfpiecesize))
-                    ? 'q'
-                    : 'b'
-                : (y < (rowindex * piecesize + halfpiecesize))
-                    ? 'r'
-                    : 'n';
-            if (rowindex === 0) {
-                promopiece = promopiece.toUpperCase();
-            }
-        }
-        return {
-            promopiece: promopiece,
-            x: x, y: y,
-            dragX: dragX, dragY: dragY,
-            index: index, colindex: colindex, rowindex: rowindex,
-        };
-    }
-    //[cf]
-    //[of]:readDraginfos()
-    /** used when `drag()`ging a piece */
-    readDraginfos(event) {
-        let offset = this.elem.offset();
-        let halfpiecesize = this.dimensions.halfpiecesize;
-        return {
-            dragX: event.pageX - offset.left - halfpiecesize,
-            dragY: event.pageY - offset.top - halfpiecesize
-        };
-    }
-    //[cf]
-    //[of]:updateDimensions()
-    /** read out the board size and piece size on document load and -resize */
-    updateDimensions() {
-        let boardsize = Math.round(this.elem.width() || 300);
-        let piecesize = Math.round(boardsize / 8);
-        let halfpiecesize = Math.round(piecesize / 2);
-        return {
-            boardsize: boardsize,
-            piecesize: piecesize,
-            halfpiecesize: halfpiecesize
-        };
-    }
 }
+;
+//[c]~ interface Boarddimensions {
+//[c]    ~ x:pixels,
+//[c]    ~ y:pixels,
+//[c]    ~ boardsize: pixels,
+//[c]    ~ piecesize: pixels,
+//[c]    ~ halfpiecesize: pixels
+//[c]~ }
 //[c]( Tools
 //[of]:getindex()
 function getindex(elem) {
