@@ -28,13 +28,13 @@ class State {
     //[cf]
     //[of]:start()
     start() {
-        return this.notifyObservers();
+        this.notifyObservers();
     }
     //[cf]
     //[of]:reset()
     reset() {
         this.position = positionFromFen(STARTFEN);
-        return this.notifyObservers();
+        this.notifyObservers();
     }
     //[cf]
     //[of]:makemove()
@@ -188,7 +188,7 @@ class State {
         else if (newenpassant) {
             position.enpassant = newenpassant;
         }
-        return this.notifyObservers();
+        this.notifyObservers();
     }
     //[cf]
     //[of]:movepiece()
@@ -206,7 +206,6 @@ class State {
         for (let observer of this.observers) {
             observer.update();
         }
-        return this;
     }
 }
 //[cf]
@@ -289,16 +288,25 @@ class Board extends Observer {
     update() {
         let board = this.state.position.board;
         let pieces = this.pieces;
-        //[of]:place new or existing pieces on the board
-        for (const [index, id] of items(board)) {
+        //[of]:create new pieces, append them to the board
+        let f = null;
+        for (const id of values(board)) {
             if (!(id in pieces)) {
-                let elem = this.makepiece(id);
-                this.place(elem, index);
+                let elem = this.makeelem(id);
+                if (!f) {
+                    f = document.createDocumentFragment();
+                }
+                elem.appendTo(f);
             }
-            else {
-                let elem = pieces[id];
-                this.place(elem, index, { 'smooth': true });
-            }
+        }
+        if (f) {
+            this.elem.append(f);
+        }
+        //[cf]
+        //[of]:place the pieces
+        for (const id of values(board)) {
+            let elem = pieces[id];
+            this.place(elem);
         }
         //[cf]
         //[of]:drop non existing pieces off the board
@@ -309,7 +317,6 @@ class Board extends Observer {
             }
         }
         //[cf]
-        return this;
     }
     //[cf]
     //[of]:updateDimensions()
@@ -330,17 +337,17 @@ class Board extends Observer {
             let piecesize = this.piecesize = Math.round(size / 8);
             this.halfpiecesize = Math.round(piecesize / 2);
         }
-        return this;
     }
     //[cf]
     //[of]:grab(pieceelem, mousedownevent)
     /** grab a piece on the board */
     grab(elem, event) {
         this.grabbedelem = elem;
+        // So that the element later gets adjusted in the `place` function.
+        elem.data('index', -2);
         let mousepos = this.mousepos(event);
         this.aligncursor(elem, mousepos);
         this.adjustpromochooser(elem, mousepos);
-        return this;
     }
     //[cf]
     //[of]:drag(mousemoveevent)
@@ -352,27 +359,27 @@ class Board extends Observer {
             this.aligncursor(elem, mousepos);
             this.adjustpromochooser(elem, mousepos);
         }
-        return this;
     }
     //[cf]
     //[of]:release(mouseupevent)
     /** release a grabbed piece */
     release(event) {
         let elem = this.grabbedelem;
+        this.grabbedelem = null;
         if (elem) {
             this.hidepromo();
             elem.css({ zIndex: 1 });
             let mouse = this.mousepos(event);
             if (mouse.inboard) {
                 let [from, to, promopiece] = this.getmove(elem, mouse);
+                //[c]            ~ setTimeout(()=>{
                 this.state.makemove(from, to, promopiece);
+                //[c]            ~ },0);
             }
             else {
                 this.update();
             }
-            this.grabbedelem = null;
         }
-        return this;
     }
     //[of]:getmove(elem, mousepos)
     getmove(elem, mousepos) {
@@ -450,7 +457,6 @@ class Board extends Observer {
                 this.hidepromo();
             }
         }
-        return this;
     }
     //[cf]
     //[of]:showpromo(elem, index)
@@ -462,14 +468,12 @@ class Board extends Observer {
             left: coordToPercent(x)
         });
         chooser.show();
-        return this;
     }
     //[cf]
     //[of]:hidepromo()
     hidepromo() {
         this.promochooserblack.hide();
         this.promochooserwhite.hide();
-        return this;
     }
     //[cf]
     //[of]:reset()
@@ -483,37 +487,36 @@ class Board extends Observer {
             this.promochooserwhite.hide();
             this.update();
         }
-        return this;
     }
     //[cf]
     //[of]:place(pieceelem, index?)
-    /** place a piece according to its index */
-    place(elem, index, options = { smooth: false }) {
-        if (!index) {
-            index = getpiece(elem).index;
+    /** place a piece dom element on the board according to the index of its
+    related Piece read from the hash. */
+    place(elem) {
+        let to = getpiece(elem).index;
+        let from = getindex(elem);
+        if (from !== to) {
+            let [x, y] = indexToCoords(to);
+            if (from === -1) { // -1 means, the element was newly created.
+                elem.css({
+                    top: coordToPercent(y),
+                    left: coordToPercent(x)
+                });
+            }
+            else {
+                elem.animate({
+                    top: coordToPercent(y),
+                    left: coordToPercent(x)
+                }, 100);
+            }
+            elem.data('index', to);
         }
-        let [x, y] = indexToCoords(index);
-        if (options.smooth) {
-            elem.animate({
-                top: coordToPercent(y),
-                left: coordToPercent(x)
-            }, 100);
-        }
-        else {
-            elem.css({
-                top: coordToPercent(y),
-                left: coordToPercent(x)
-            });
-        }
-        elem.data('index', index);
-        return this;
     }
     //[cf]
     //[of]:dropoff(pieceelem)
     /** remove a piece from the board (the piece actually just gets hidden) */
     dropoff(elem) {
         elem.hide();
-        return this;
     }
     //[cf]
     //[of]:aligncursor(pieceelem, Mousepos)
@@ -525,7 +528,6 @@ class Board extends Observer {
             top: mousepos.y - halfpiecesize,
             left: mousepos.x - halfpiecesize,
         });
-        return this;
     }
     //[cf]
     //[of]:mousepos(dragdropevent)
@@ -562,15 +564,15 @@ class Board extends Observer {
         return Math.floor(mouse.x / this.piecesize);
     }
     //[cf]
-    //[of]:makepiece(uid)
-    /** create the dom element for a piece and append it to the board */
-    makepiece(id) {
+    //[of]:makeelem(uid)
+    /** create the dom element for a piece and add it to <Board>.pieces. Return the
+    element (It wont get appended to the boards dom element). */
+    makeelem(id) {
         let piece = HASH.get(id);
         let piecetype = piece.iswhite ? piece.type.toUpperCase() : piece.type;
         let elem = $(`<chess-piece class="${piecetype}" />`);
-        elem.data({ id: id, index: 0 });
+        elem.data({ id: id, index: -1 });
         this.pieces[id] = elem;
-        this.elem.append(elem);
         return elem;
     }
 }
@@ -791,7 +793,7 @@ function squarename(index) {
 //[cf]
 //[c])
 window.onload = function () {
-    $('#please-enable-js-message').remove();
+    $('#please-enable-javascript').remove();
     let state = new State();
     new Board('#board', state);
     //[c]    ~ new ChessNotation('#notation', state);

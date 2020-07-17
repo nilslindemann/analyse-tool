@@ -34,17 +34,17 @@ class State {
     //[cf]
     //[of]:start()
     public start() {
-        return this.notifyObservers();
+        this.notifyObservers();
     }
     //[cf]
     //[of]:reset()
     public reset() {
         this.position = positionFromFen(STARTFEN);
-        return this.notifyObservers();
+        this.notifyObservers();
     }
     //[cf]
     //[of]:makemove()
-    public makemove(from: index, to: index, promopiece:promopiece):this {
+    public makemove(from: index, to: index, promopiece:promopiece) {
     
         if (from === to) {
             return this.notifyObservers();
@@ -236,12 +236,12 @@ class State {
             position.enpassant = newenpassant;
         }
     
-        return this.notifyObservers();
+        this.notifyObservers();
     }
     
     //[cf]
     //[of]:movepiece()
-    private movepiece( from:index, to:index):void {
+    private movepiece( from:index, to:index) {
         let board = this.position.board;
         let fromid = board[from];
         HASH.get(fromid).index = to;
@@ -252,11 +252,10 @@ class State {
 
     //[of]:notifyObservers()
     /** called internally when changes to the State were made */
-    private notifyObservers():this {
+    private notifyObservers() {
         for (let observer of this.observers) {
             observer.update();
         }
-        return this;
     }
     //[cf]
 
@@ -362,20 +361,30 @@ class Board extends Observer {
     }
     //[cf]
     //[of]:update()
-    public update():this {
+    public update() {
     
         let board = this.state.position.board;
         let pieces = this.pieces;
     
-        //[of]:place new or existing pieces on the board
-        for (const [index, id] of items(board)) {
+        //[of]:create new pieces, append them to the board
+        let f = null;
+        
+        for (const id of values(board)) {
             if (!(id in pieces)) {
-                let elem = this.makepiece(id);
-                this.place(elem, index);
-            } else {
-                let elem = pieces[id];
-                this.place(elem, index, { 'smooth': true });
+                let elem = this.makeelem(id);
+                if (!f) { f = document.createDocumentFragment(); }
+                elem.appendTo(f);
             }
+        }
+        
+        if (f) {
+            this.elem.append(f);
+        }
+        //[cf]
+        //[of]:place the pieces
+        for (const id of values(board)) {
+            let elem = pieces[id];
+            this.place(elem);
         }
         //[cf]
         //[of]:drop non existing pieces off the board
@@ -387,13 +396,12 @@ class Board extends Observer {
         }
         //[cf]
     
-        return this;
     }
     //[cf]
     //[of]:updateDimensions()
     /** read out the board size and piece size on document load and -resize */
     
-    private updateDimensions():this {
+    private updateDimensions() {
         {
             let offset = this.elem.offset();
             let x = offset ? offset.left : 0;
@@ -409,60 +417,59 @@ class Board extends Observer {
             let piecesize = this.piecesize = Math.round(size / 8);
             this.halfpiecesize = Math.round(piecesize / 2);
         }
-        
-        return this;
     }
     //[cf]
 
     //[of]:grab(pieceelem, mousedownevent)
     /** grab a piece on the board */
     
-    private grab( elem:pieceelem, event:mousedownevent ):this {
+    private grab( elem:pieceelem, event:mousedownevent ) {
         this.grabbedelem = elem;
+        
+        // So that the element later gets adjusted in the `place` function.
+        elem.data('index', -2);
+    
         let mousepos = this.mousepos(event);
         this.aligncursor(elem, mousepos);
         this.adjustpromochooser(elem, mousepos);
-        return this;
     }
     
     //[cf]
     //[of]:drag(mousemoveevent)
     /** drag a grabbed piece */
     
-    private drag( event:mousemoveevent ):this {
+    private drag( event:mousemoveevent ) {
         let elem = this.grabbedelem;
         if (elem) {
             let mousepos = this.mousepos(event);
             this.aligncursor(elem, mousepos);
             this.adjustpromochooser(elem, mousepos);
         }
-        return this;
     }
     //[cf]
     //[of]:release(mouseupevent)
     /** release a grabbed piece */
     
-    private release( event:mouseupevent ):this {
+    private release( event:mouseupevent ) {
         let elem = this.grabbedelem;
+        this.grabbedelem = null;
         if (elem) {
             this.hidepromo();
             elem.css({ zIndex: 1 });
             let mouse = this.mousepos(event);
             if (mouse.inboard) {
                 let [from, to, promopiece] = this.getmove(elem, mouse);
-                this.state.makemove( from, to, promopiece );
+    //[c]            ~ setTimeout(()=>{
+                    this.state.makemove( from, to, promopiece );
+    //[c]            ~ },0);
             } else {
                 this.update();
             }
-            this.grabbedelem = null;
         }
-        return this;
     }
     
     //[of]:getmove(elem, mousepos)
-    private getmove(
-        elem:pieceelem, mousepos:Mousepos
-    ):[index, index, promopiece] {
+    private getmove( elem:pieceelem, mousepos:Mousepos ):[index, index, promopiece] {
         let piece = getpiece(elem);
     
         let from = piece.index;
@@ -513,7 +520,7 @@ class Board extends Observer {
     //[cf]
 
     //[of]:adjustpromochooser(pieceelem, Mousepos)
-    private adjustpromochooser(elem:pieceelem, mouse:Mousepos):this {
+    private adjustpromochooser(elem:pieceelem, mouse:Mousepos) {
         let piece = getpiece(elem);
         if (piece.type === 'p') {
             if (mouse.inboard) {
@@ -542,34 +549,31 @@ class Board extends Observer {
                 this.hidepromo();
             }
         }
-        return this;
     }
     //[cf]
     //[of]:showpromo(elem, index)
     /** Show the promotion indicator */
     
-    private showpromo(chooser:elem, index:index):this {
+    private showpromo(chooser:elem, index:index) {
         let [x,y] = indexToCoords(index);
         chooser.css({
             top:coordToPercent(y),
             left:coordToPercent(x)
         });
         chooser.show();
-        return this;
     }
     //[cf]
     //[of]:hidepromo()
-    private hidepromo():this{
+    private hidepromo() {
         this.promochooserblack.hide();
         this.promochooserwhite.hide();
-        return this;
     }
     //[cf]
 
     //[of]:reset()
     /** a mouse up in weird locations calls this */
     
-    private reset():this {
+    private reset() {
         let elem = this.grabbedelem;
         if (elem) {
             elem.css({ zIndex: 1 });
@@ -578,57 +582,51 @@ class Board extends Observer {
             this.promochooserwhite.hide();
             this.update();
         }
-        return this;
     }
     
     //[cf]
     //[of]:place(pieceelem, index?)
-    /** place a piece according to its index */
+    /** place a piece dom element on the board according to the index of its
+    related Piece read from the hash. */
     
-    private place(
-        elem:pieceelem,
-        index:index|null,
-        options:{ smooth:boolean } = { smooth: false }
-    ):this {
-        if (!index) {
-            index = getpiece(elem).index;
+    private place( elem:pieceelem ) {
+        let to = getpiece(elem).index;
+        let from = getindex(elem);
+        if (from !== to) {
+            let [x,y] = indexToCoords(to);
+            if (from === -1) { // -1 means, the element was newly created.
+                elem.css({
+                    top: coordToPercent(y),
+                    left: coordToPercent(x)
+                });
+            } else {
+                elem.animate({
+                    top: coordToPercent(y),
+                    left: coordToPercent(x)
+                }, 100);
+            }
+            elem.data('index', to);
         }
-        let [x,y] = indexToCoords(index);
-        if (options.smooth) {
-            elem.animate({
-                top: coordToPercent(y),
-                left: coordToPercent(x)
-            }, 100);
-        } else {
-            elem.css({
-                top: coordToPercent(y),
-                left: coordToPercent(x)
-            });
-        }
-        elem.data('index', index);
-        return this;
     }
     //[cf]
     //[of]:dropoff(pieceelem)
     /** remove a piece from the board (the piece actually just gets hidden) */
     
-    private dropoff( elem:pieceelem ):this {
+    private dropoff( elem:pieceelem ) {
         elem.hide();
-        return this;
     }
     //[cf]
 
     //[of]:aligncursor(pieceelem, Mousepos)
     /** align a piece at the cursor */
     
-    private aligncursor( elem:pieceelem, mousepos:Mousepos ):this {
+    private aligncursor( elem:pieceelem, mousepos:Mousepos ) {
         let halfpiecesize = this.halfpiecesize;
         elem.css({
             zIndex: 1000,
             top: mousepos.y - halfpiecesize,
             left: mousepos.x - halfpiecesize,
         });
-        return this;
     }
     //[cf]
     //[of]:mousepos(dragdropevent)
@@ -669,16 +667,16 @@ class Board extends Observer {
         return Math.floor(mouse.x / this.piecesize);
     }
     //[cf]
-    //[of]:makepiece(uid)
-    /** create the dom element for a piece and append it to the board */
+    //[of]:makeelem(uid)
+    /** create the dom element for a piece and add it to <Board>.pieces. Return the
+    element (It wont get appended to the boards dom element). */
     
-    private makepiece( id:uid ):pieceelem {
+    private makeelem( id:uid ):pieceelem {
         let piece = HASH.get(id);
         let piecetype = piece.iswhite ? piece.type.toUpperCase() : piece.type;
         let elem = $(`<chess-piece class="${piecetype}" />`);
-        elem.data({ id: id, index: 0 });
+        elem.data({ id: id, index: -1 });
         this.pieces[id] = elem;
-        this.elem.append(elem);
         return elem;
     }
     //[cf]
@@ -1063,7 +1061,7 @@ type mouseupevent = JQuery.MouseUpEvent
 //[c])
 
 window.onload = function () {
-    $('#please-enable-js-message').remove();
+    $('#please-enable-javascript').remove();
     let state = new State();
     new Board('#board', state);
 //[c]    ~ new ChessNotation('#notation', state);

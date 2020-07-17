@@ -4,5 +4,8 @@
 
 #[l]:.gitignore:.gitignore
 
+Bitte mit https://github.com/nilslindemann/Code_Browser_49 öffnen,
+Navigation mittels ALT + Pfeiltasten.
 
-Bitte mit https://github.com/nilslindemann/Code_Browser_49 öffnen, Navigation mittels ALT + Pfeiltasten.
+#[l]:scrap.txt:../../scrap/code/analyse-tool/scrap.txt
+
