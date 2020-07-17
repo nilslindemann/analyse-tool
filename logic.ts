@@ -44,7 +44,7 @@ class State {
     }
     //[cf]
     //[of]:makemove()
-    public makemove(from: boardindex, to: boardindex, promopiece:promopiece):this {
+    public makemove(from: index, to: index, promopiece:promopiece):this {
     
         if (from === to) {
             return this.notifyObservers();
@@ -212,7 +212,7 @@ class State {
         //[of]:pawn promotion
         if (!movemade && promopiece) {
             if (!(to in board)) {
-                board[to] = makePiece(promopiece as fenpiece, to);
+                board[to] = makepiece(promopiece as fenpiece, to);
                 delete board[from];
                 waslegalmove = true;
             }
@@ -241,7 +241,7 @@ class State {
     
     //[cf]
     //[of]:movepiece()
-    private movepiece( from:boardindex, to:boardindex):void {
+    private movepiece( from:index, to:index):void {
         let board = this.position.board;
         let fromid = board[from];
         HASH.get(fromid).index = to;
@@ -290,7 +290,7 @@ class Board extends Observer {
     private grabbedelem:pieceelem|null = null;
     private promochooserwhite:elem;
     private promochooserblack:elem;
-    private position!: PixelLocation;
+    private position!: Pos;
     private size!: pixels;
     private piecesize!: pixels;
     private halfpiecesize!: pixels;
@@ -370,7 +370,7 @@ class Board extends Observer {
         //[of]:place new or existing pieces on the board
         for (const [index, id] of items(board)) {
             if (!(id in pieces)) {
-                let elem = this.makePiece(id);
+                let elem = this.makepiece(id);
                 this.place(elem, index);
             } else {
                 let elem = pieces[id];
@@ -390,7 +390,6 @@ class Board extends Observer {
         return this;
     }
     //[cf]
-
     //[of]:updateDimensions()
     /** read out the board size and piece size on document load and -resize */
     
@@ -420,7 +419,7 @@ class Board extends Observer {
     
     private grab( elem:pieceelem, event:mousedownevent ):this {
         this.grabbedelem = elem;
-        let mousepos = this.mousepos(event) as PixelLocation;
+        let mousepos = this.mousepos(event);
         this.aligncursor(elem, mousepos);
         this.adjustpromochooser(elem, mousepos);
         return this;
@@ -433,64 +432,13 @@ class Board extends Observer {
     private drag( event:mousemoveevent ):this {
         let elem = this.grabbedelem;
         if (elem) {
-            let mousepos = this.mousepos(event) as PixelLocation;
+            let mousepos = this.mousepos(event);
             this.aligncursor(elem, mousepos);
             this.adjustpromochooser(elem, mousepos);
         }
         return this;
     }
     //[cf]
-    //[of]:adjustpromochooser(pieceelem, PixelLocation)
-    private adjustpromochooser(elem:pieceelem, mousepos:PixelLocation):this {
-        let piece = getpiece(elem);
-        if (piece.type == 'p') {
-            let from = piece.index;
-            let to = this.getindex(mousepos);
-            let iswhite = piece.iswhite;
-            let board = this.state.position.board;
-    
-            if ( iswhite ) {
-                if ( to<8 && !(to in board) ) {
-                    this.showpromo(this.promochooserwhite, to);
-                } else if ( to>7 && to<16 && !(to-8 in board) ) {
-                    this.showpromo(this.promochooserwhite, to-8);
-                } else if (to>15) {
-                    this.hidepromo();
-                }
-            } else {
-                if ( to>55 && !(to in board) ) {
-                    this.showpromo(this.promochooserblack, to);
-                } else if ( to>47 && to<56 && !(to+8 in board) ) {
-                    this.showpromo(this.promochooserblack, to+8);
-                } else if (to<48) {
-                    this.hidepromo();
-                }
-            }
-        }
-        return this;
-    }
-    //[cf]
-    //[of]:showpromo(elem, boardindex)
-    /** Show the promotion indicator */
-    
-    private showpromo(chooser:elem, index:boardindex):this {
-        let [x,y] = indexToCoords(index);
-        chooser.css({
-            top:coordToPercent(y),
-            left:coordToPercent(x)
-        });
-        chooser.show();
-        return this;
-    }
-    //[cf]
-    //[of]:hidepromo()
-    private hidepromo():this{
-        this.promochooserblack.hide();
-        this.promochooserwhite.hide();
-        return this;
-    }
-    //[cf]
-
     //[of]:release(mouseupevent)
     /** release a grabbed piece */
     
@@ -499,9 +447,9 @@ class Board extends Observer {
         if (elem) {
             this.hidepromo();
             elem.css({ zIndex: 1 });
-            let mousepos = this.mousepos(event, {strict:true});
-            if (mousepos) {
-                let [from, to, promopiece] = this.getmove(elem, mousepos);
+            let mouse = this.mousepos(event);
+            if (mouse.inboard) {
+                let [from, to, promopiece] = this.getmove(elem, mouse);
                 this.state.makemove( from, to, promopiece );
             } else {
                 this.update();
@@ -513,8 +461,8 @@ class Board extends Observer {
     
     //[of]:getmove(elem, mousepos)
     private getmove(
-        elem:pieceelem, mousepos:PixelLocation
-    ):[boardindex, boardindex, promopiece] {
+        elem:pieceelem, mousepos:Mousepos
+    ):[index, index, promopiece] {
         let piece = getpiece(elem);
     
         let from = piece.index;
@@ -535,10 +483,10 @@ class Board extends Observer {
         return [from, to, promopiece];
     }
     
-    //[of]:getpromopiece(PixelLocation)
+    //[of]:getpromopiece(Mousepos)
     /** read the desired promopiece from where the mouse was released */
     
-    private getpromopiece( mouse:PixelLocation ):promopiece {
+    private getpromopiece( mouse:Mousepos ):promopiece {
         let x = mouse.x;
         let y = mouse.y;
         let row = this.getrow(mouse);
@@ -563,6 +511,61 @@ class Board extends Observer {
     //[cf]
     //[cf]
     //[cf]
+
+    //[of]:adjustpromochooser(pieceelem, Mousepos)
+    private adjustpromochooser(elem:pieceelem, mouse:Mousepos):this {
+        let piece = getpiece(elem);
+        if (piece.type === 'p') {
+            if (mouse.inboard) {
+                let to = this.getindex(mouse);
+                let iswhite = piece.iswhite;
+                let board = this.state.position.board;
+        
+                if ( iswhite ) {
+                    if ( to<8 && !(to in board) ) {
+                        this.showpromo(this.promochooserwhite, to);
+                    } else if ( to>7 && to<16 && !(to-8 in board) ) {
+                        this.showpromo(this.promochooserwhite, to-8);
+                    } else if (to>15) {
+                        this.hidepromo();
+                    }
+                } else {
+                    if ( to>55 && !(to in board) ) {
+                        this.showpromo(this.promochooserblack, to);
+                    } else if ( to>47 && to<56 && !(to+8 in board) ) {
+                        this.showpromo(this.promochooserblack, to+8);
+                    } else if (to<48) {
+                        this.hidepromo();
+                    }
+                }
+            } else {
+                this.hidepromo();
+            }
+        }
+        return this;
+    }
+    //[cf]
+    //[of]:showpromo(elem, index)
+    /** Show the promotion indicator */
+    
+    private showpromo(chooser:elem, index:index):this {
+        let [x,y] = indexToCoords(index);
+        chooser.css({
+            top:coordToPercent(y),
+            left:coordToPercent(x)
+        });
+        chooser.show();
+        return this;
+    }
+    //[cf]
+    //[of]:hidepromo()
+    private hidepromo():this{
+        this.promochooserblack.hide();
+        this.promochooserwhite.hide();
+        return this;
+    }
+    //[cf]
+
     //[of]:reset()
     /** a mouse up in weird locations calls this */
     
@@ -579,12 +582,12 @@ class Board extends Observer {
     }
     
     //[cf]
-    //[of]:place(pieceelem, boardindex?)
+    //[of]:place(pieceelem, index?)
     /** place a piece according to its index */
     
     private place(
         elem:pieceelem,
-        index:boardindex|null,
+        index:index|null,
         options:{ smooth:boolean } = { smooth: false }
     ):this {
         if (!index) {
@@ -615,10 +618,10 @@ class Board extends Observer {
     }
     //[cf]
 
-    //[of]:aligncursor(pieceelem, PixelLocation)
+    //[of]:aligncursor(pieceelem, Mousepos)
     /** align a piece at the cursor */
     
-    private aligncursor( elem:pieceelem, mousepos:PixelLocation ):this {
+    private aligncursor( elem:pieceelem, mousepos:Mousepos ):this {
         let halfpiecesize = this.halfpiecesize;
         elem.css({
             zIndex: 1000,
@@ -632,49 +635,44 @@ class Board extends Observer {
     /** return the mouse position relative to the board. Returns null when
     strict === true and the mouse is not inside the board */
     
-    private mousepos(
-        event:dragdropevent, options={strict:false}
-    ):PixelLocation|null {
+    private mousepos( event:dragdropevent ):Mousepos {
         let position = this.position;
         let x = event.pageX - position.x;
         let y = event.pageY - position.y;
-        if (options.strict) {
-            let boardsize = this.size;
-            if (x < 0 || y < 0 || x > boardsize || y > boardsize) {
-                return null;
-            }
-        }
+        let boardsize = this.size;
+        let inboard = x>0 && y>0 && x<boardsize && y<boardsize;
         return {
             x: x,
-            y: y
+            y: y,
+            inboard: inboard,
         };
     }
     //[cf]
-    //[of]:getindex(PixelLocation)
+    //[of]:getindex(Mousepos)
     /** get the board index correlating to this mouse position */
     
-    private getindex(mouse:PixelLocation):boardindex {
+    private getindex(mouse:Mousepos):index {
         return 8 * this.getrow(mouse) + this.getcol(mouse);
     }
     //[cf]
-    //[of]:getrow(PixelLocation)
+    //[of]:getrow(Mousepos)
     /** get the row index correlating to this mouse position */
     
-    private getrow( mouse:PixelLocation ):rowindex {
+    private getrow( mouse:Mousepos ):row {
         return Math.floor(mouse.y / this.piecesize);
     }
     //[cf]
-    //[of]:getcol(PixelLocation)
+    //[of]:getcol(Mousepos)
     /** get the column index correlating to this mouse position */
     
-    private getcol( mouse:PixelLocation ):colindex {
+    private getcol( mouse:Mousepos ):col {
         return Math.floor(mouse.x / this.piecesize);
     }
     //[cf]
-    //[of]:makePiece(uid)
+    //[of]:makepiece(uid)
     /** create the dom element for a piece and append it to the board */
     
-    private makePiece( id:uid ):pieceelem {
+    private makepiece( id:uid ):pieceelem {
         let piece = HASH.get(id);
         let piecetype = piece.iswhite ? piece.type.toUpperCase() : piece.type;
         let elem = $(`<chess-piece class="${piecetype}" />`);
@@ -686,38 +684,18 @@ class Board extends Observer {
     //[cf]
 }
 
-//[c]~ interface Draggers { x:pixels, y:pixels };
-
-interface PixelLocation { x:pixels, y:pixels };
-
-interface Mouseinfos {
-    promopiece:promopiece,
-//[c]    ~ x:pixels, y:pixels,
-//[c]    ~ dragX:pixels, dragY:pixels,
-    index:boardindex
-//[c]    ~ colindex:colindex, rowindex:rowindex,
-}
-
-//[c]~ interface Boarddimensions {
-//[c]    ~ x:pixels,
-//[c]    ~ y:pixels,
-//[c]    ~ boardsize: pixels,
-//[c]    ~ piecesize: pixels,
-//[c]    ~ halfpiecesize: pixels
-//[c]~ }
-
 //[c]( Tools
-//[of]:getindex()
-function getindex( elem:pieceelem ):boardindex {
+//[of]:getindex(pieceelem)
+function getindex( elem:pieceelem ):index {
     return parseInt(elem.data('index'));
 }
 //[cf]
-//[of]:getid()
+//[of]:getid(pieceelem)
 function getid( elem:pieceelem ):uid {
     return parseInt(elem.data('id'));
 }
 //[cf]
-//[of]:getpiece()
+//[of]:getpiece(pieceelem)
 function getpiece( elem:pieceelem ):Piece {
     return HASH.get( getid(elem) );
 }
@@ -760,7 +738,7 @@ interface Chessposition {
         blackshort:boolean,
         blacklong:boolean
     },
-    enpassant:boardindex|null
+    enpassant:index|null
 }
 
 //[of]:positionFromFen()
@@ -782,7 +760,7 @@ function positionFromFen( fen:fen ):Chessposition {
         } else if (char === '/') {
             continue;
         } else {
-            board[curindex] = makePiece(char as fenpiece, curindex);
+            board[curindex] = makepiece(char as fenpiece, curindex);
             curindex++;
         }
     }
@@ -812,17 +790,26 @@ function positionFromFen( fen:fen ):Chessposition {
     };
 }
 //[cf]
+//[of]:ischessposition()
+function ischessposition(object:any): object is Chessposition {
+    if ('board' in object) {
+        return true;
+    }
+    return false;
+}
+//[cf]
 //[cf]
 //[of]:Piece
 /** the abstract piece representation. This is what `HASH.get(<uid>)` returns. */
 interface Piece {
     type: piecetype,
     id: uid,
-    index: boardindex,
+    index: index,
     iswhite: boolean
 }
 
-function makePiece( name:fenpiece, index:boardindex ) : uid {
+//[of]:makepiece()
+function makepiece( name:fenpiece, index:index ) : uid {
     let piecetype = name.toLowerCase();
     if (!"kqrbnp".includes(piecetype)) {
         throw new Error("Illegal piecetype");
@@ -838,6 +825,31 @@ function makePiece( name:fenpiece, index:boardindex ) : uid {
     let id = piece.id = HASH.add(piece);
     return id;
 }
+//[cf]
+//[of]:ispiece()
+function ispiece(object:any): object is Piece {
+    if (
+        'type' in object && 'id' in object &&
+        'index' in object && 'iswhite' in object
+    ) {
+        return true;
+    }
+    return false;
+}
+//[cf]
+//[cf]
+//[of]:Pos
+interface Pos { x:pixels, y:pixels };
+interface Mousepos { x:pixels, y:pixels, inboard:boolean };
+
+//[of]:function ispos()
+function ispos(object:any): object is Pos|Mousepos {
+    if ('x' in object && 'y' in object) {
+        return true;
+    }
+    return false;
+}
+//[cf]
 //[cf]
 //[c])
 
@@ -919,18 +931,18 @@ function* values(
 
 //[c]( Misc Tools
 //[of]:indexToCoords()
-function indexToCoords( index:boardindex ):[ colindex, rowindex ] {
+function indexToCoords( index:index ):[ col, row ] {
     let x = index % 8;
     return [ x, (index-x)/8 ];
 }
 //[cf]
 //[of]:coordsToIndex()
-function coordsToIndex( x:colindex, y:rowindex ):boardindex {
+function coordsToIndex( x:col, y:row ):index {
     return y * 8 + x;
 }
 //[cf]
 //[of]:coordToPercent()
-function coordToPercent( coord:index ):string {
+function coordToPercent( coord:col|row ):string {
     return coord * 12.5 + '%';
 }
 //[cf]
@@ -950,9 +962,9 @@ function handled( event:dragdropevent ):boolean {
 }
 //[cf]
 //[of]:squarename()
-/** Convert a boardindex to the representation of the square name in algebraic
+/** Convert a index to the representation of the square name in algebraic
 chess notation. Eg `0` becomes `'a8'`, `63` becomes `'h1'`. */
-function squarename( index:boardindex|null ):string|null {
+function squarename( index:index|null ):string|null {
     if(index === null) {
         return null;
     }
@@ -996,26 +1008,22 @@ then returns the abstract representation of the piece (not its dom element).
 `<Board>.pieces[<uid>]` returns the dom element of the piece on the board.*/
 type chessboard = { [ index:number ]:uid };
 //[cf]
-//[of]:boardindex
+//[of]:index
 /** The unit denoting the index of a square in the internal chessboard
-representation. 0 to 63. Equivalent to `rowindex * 8 + colindex`. 0 is 'a8' in
+representation. 0 to 63. Equivalent to `row * 8 + col`. 0 is 'a8' in
 algebraic chess notation. This is the top left square, when white is on bottom.
 63 is 'h1', the bottom right square. */
-type boardindex = int;
+type index = int;
 //[cf]
-//[of]:colindex
+//[of]:col
 /** Horizontal index on an abstract chessboard. 0 to 7. Would be 'a' to 'h' in
 algebraic chess notation. */
-type colindex = int;
+type col = int;
 //[cf]
-//[of]:rowindex
+//[of]:row
 /** Vertical index on an abstract chessboard. 0 to 7. Would be '8' to '1' in
 algebraic chess notation. */
-type rowindex = int;
-//[cf]
-//[of]:index
-/** either a colindex or a rowindex */
-type index = colindex|rowindex;
+type row = int;
 //[cf]
 //[of]:uid
 /** An autogenerated unique positive integer pointing to a piece (see the Piece
